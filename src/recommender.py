@@ -1,207 +1,158 @@
-import numpy as np
-import pandas as pd
-from typing import List, Tuple, Dict
-
 class MovieRecommender:
-    """Movie recommendation system using trained embeddings."""
-    
-    def __init__(self, model_path: str, movies_df: pd.DataFrame):
+    def __init__(self, model_path, movies_df):
         """
-        Initialize recommender with trained model.
+        Initialize the recommender with proper user/movie ID mapping
+        """
+        self.movies_df = movies_df
         
-        Parameters:
-        -----------
-        model_path : str
-            Path to .npz file with trained embeddings
-        movies_df : pd.DataFrame
-            DataFrame with movie metadata (movieId, title, genres)
-        """
-        # Load trained model
+        # Load model
         model_data = np.load(model_path)
-        self.user_embeddings = model_data['user_embeddings']
-        self.movie_embeddings = model_data['movie_embeddings']
+        self.user_factors = model_data['user_factors']
+        self.movie_factors = model_data['movie_factors']
         self.user_biases = model_data['user_biases']
         self.movie_biases = model_data['movie_biases']
+        self.global_mean = float(model_data['global_mean'])
         
-        # Load hyperparameters if available
-        self.k = model_data.get('k', self.movie_embeddings.shape[0])
+        self.k = self.user_factors.shape[1]
+        self.n_users = len(self.user_biases)
+        self.n_movies = len(self.movie_biases)
         
-        # Store movie metadata
-        self.movies_df = movies_df
-        self.n_movies = self.movie_embeddings.shape[1]
+        # Load ID mappings if they exist
+        if 'user_id_map' in model_data.files:
+            self.user_id_map = model_data['user_id_map'].item()
+            # Check mapping direction and create reverse if needed
+            first_key = list(self.user_id_map.keys())[0]
+            if isinstance(first_key, (int, np.integer)) and first_key > 100:
+                # It's original_id -> index (correct)
+                self.user_idx_to_id = {v: k for k, v in self.user_id_map.items()}
+            else:
+                # It's index -> original_id (reverse it)
+                self.user_idx_to_id = self.user_id_map
+                self.user_id_map = {v: k for k, v in self.user_idx_to_id.items()}
+        else:
+            # No mapping - assume sequential IDs
+            self.user_id_map = {i: i for i in range(self.n_users)}
+            self.user_idx_to_id = {i: i for i in range(self.n_users)}
         
-        # Create movie ID mapping (assuming movies are indexed 0 to n-1)
-        # Adjust this based on your actual mapping
-        self.movie_ids = movies_df['movieId'].values
-        self.movieid_to_idx = {mid: idx for idx, mid in enumerate(self.movie_ids)}
+        if 'movie_id_map' in model_data.files:
+            self.movie_id_map = model_data['movie_id_map'].item()
+            # Check mapping direction
+            first_key = list(self.movie_id_map.keys())[0]
+            if isinstance(first_key, (int, np.integer)) and first_key > 100:
+                # It's original_id -> index (correct)
+                self.movie_idx_to_id = {v: k for k, v in self.movie_id_map.items()}
+            else:
+                # It's index -> original_id (reverse it)
+                self.movie_idx_to_id = self.movie_id_map
+                self.movie_id_map = {v: k for k, v in self.movie_idx_to_id.items()}
+        else:
+            # No mapping - use movieId from dataframe
+            self.movie_id_map = {row['movieId']: idx 
+                                for idx, row in movies_df.iterrows()}
+            self.movie_idx_to_id = {v: k for k, v in self.movie_id_map.items()}
         
-    def predict_rating(self, user_idx: int, movie_idx: int) -> float:
-        """Predict rating for a user-movie pair."""
-        if user_idx >= len(self.user_biases) or movie_idx >= self.n_movies:
-            return 0.0
+        print(f"✓ Recommender initialized:")
+        print(f"  - Users: {self.n_users:,} (ID range: {min(self.user_id_map.keys())}-{max(self.user_id_map.keys())})")
+        print(f"  - Movies: {self.n_movies:,} (ID range: {min(self.movie_id_map.keys())}-{max(self.movie_id_map.keys())})")
+        print(f"  - Latent dimensions: {self.k}")
+    
+    def _get_user_index(self, user_id):
+        """Convert user ID to internal index"""
+        if user_id in self.user_id_map:
+            return self.user_id_map[user_id]
+        else:
+            raise ValueError(f"User ID {user_id} not found in training data. "
+                           f"Valid range: {min(self.user_id_map.keys())}-{max(self.user_id_map.keys())}")
+    
+    def _get_movie_index(self, movie_id):
+        """Convert movie ID to internal index"""
+        if movie_id in self.movie_id_map:
+            return self.movie_id_map[movie_id]
+        else:
+            raise ValueError(f"Movie ID {movie_id} not found in training data")
+    
+    def predict_rating(self, user_id, movie_id):
+        """
+        Predict rating for a user-movie pair using original IDs
+        """
+        user_idx = self._get_user_index(user_id)
+        movie_idx = self._get_movie_index(movie_id)
         
-        prediction = (
-            self.user_biases[user_idx] + 
-            self.movie_biases[movie_idx] + 
-            np.dot(self.user_embeddings[:, user_idx], 
-                   self.movie_embeddings[:, movie_idx])
-        )
+        prediction = (self.global_mean + 
+                     self.user_biases[user_idx] + 
+                     self.movie_biases[movie_idx] +
+                     np.dot(self.user_factors[user_idx], self.movie_factors[movie_idx]))
         
-        # Clip to valid rating range
         return np.clip(prediction, 0.5, 5.0)
     
-    def recommend_movies(self, user_idx: int, n_recommendations: int = 10,
-                        exclude_movies: List[int] = None) -> List[Dict]:
+    def recommend_movies(self, user_id, n_recommendations=10, exclude_rated=True):
         """
-        Get top-N movie recommendations for a user.
-        
-        Parameters:
-        -----------
-        user_idx : int
-            User index
-        n_recommendations : int
-            Number of recommendations to return
-        exclude_movies : List[int]
-            Movie indices to exclude from recommendations
-        
-        Returns:
-        --------
-        List[Dict]
-            List of recommended movies with predictions
+        Get movie recommendations for a user using original user ID
         """
-        if user_idx >= len(self.user_biases):
+        try:
+            user_idx = self._get_user_index(user_id)
+        except ValueError as e:
+            print(f"Error: {e}")
             return []
         
-        # Predict ratings for all movies
-        predictions = np.zeros(self.n_movies)
-        for movie_idx in range(self.n_movies):
-            predictions[movie_idx] = self.predict_rating(user_idx, movie_idx)
+        # Calculate predictions for all movies
+        predictions = (self.global_mean + 
+                      self.user_biases[user_idx] + 
+                      self.movie_biases +
+                      np.dot(self.user_factors[user_idx], self.movie_factors.T))
         
-        # Exclude movies if provided
-        if exclude_movies:
-            predictions[exclude_movies] = -np.inf
+        predictions = np.clip(predictions, 0.5, 5.0)
         
-        # Get top-N recommendations
+        # Get top N
         top_indices = np.argsort(predictions)[::-1][:n_recommendations]
         
-        # Format results
+        # Convert back to original movie IDs
         recommendations = []
         for idx in top_indices:
-            if idx < len(self.movie_ids):
-                movie_id = self.movie_ids[idx]
-                movie_info = self.movies_df[self.movies_df['movieId'] == movie_id].iloc[0]
-                
+            movie_id = self.movie_idx_to_id[idx]
+            movie_info = self.movies_df[self.movies_df['movieId'] == movie_id]
+            
+            if not movie_info.empty:
                 recommendations.append({
-                    'movie_id': int(movie_id),
-                    'title': movie_info['title'],
-                    'genres': movie_info['genres'],
+                    'movieId': int(movie_id),
+                    'title': movie_info.iloc[0]['title'],
+                    'genres': movie_info.iloc[0]['genres'],
                     'predicted_rating': float(predictions[idx])
                 })
         
         return recommendations
     
-    def find_similar_movies(self, movie_id: int, n_similar: int = 10) -> List[Dict]:
+    def find_similar_movies(self, movie_id, n_similar=10):
         """
-        Find movies similar to a given movie based on embeddings.
-        
-        Parameters:
-        -----------
-        movie_id : int
-            Movie ID
-        n_similar : int
-            Number of similar movies to return
-        
-        Returns:
-        --------
-        List[Dict]
-            List of similar movies with similarity scores
+        Find similar movies using original movie ID
         """
-        if movie_id not in self.movieid_to_idx:
+        try:
+            movie_idx = self._get_movie_index(movie_id)
+        except ValueError as e:
+            print(f"Error: {e}")
             return []
         
-        movie_idx = self.movieid_to_idx[movie_id]
-        movie_emb = self.movie_embeddings[:, movie_idx]
+        # Calculate cosine similarity
+        movie_vec = self.movie_factors[movie_idx]
+        similarities = np.dot(self.movie_factors, movie_vec) / (
+            np.linalg.norm(self.movie_factors, axis=1) * np.linalg.norm(movie_vec)
+        )
         
-        # Compute cosine similarity with all movies
-        similarities = np.zeros(self.n_movies)
-        for idx in range(self.n_movies):
-            other_emb = self.movie_embeddings[:, idx]
-            # Cosine similarity
-            similarity = np.dot(movie_emb, other_emb) / (
-                np.linalg.norm(movie_emb) * np.linalg.norm(other_emb) + 1e-10
-            )
-            similarities[idx] = similarity
+        # Get top N (excluding the movie itself)
+        similar_indices = np.argsort(similarities)[::-1][1:n_similar+1]
         
-        # Exclude the query movie itself
-        similarities[movie_idx] = -np.inf
-        
-        # Get top-N similar movies
-        top_indices = np.argsort(similarities)[::-1][:n_similar]
-        
-        # Format results
+        # Convert back to original movie IDs
         similar_movies = []
-        for idx in top_indices:
-            if idx < len(self.movie_ids):
-                similar_movie_id = self.movie_ids[idx]
-                movie_info = self.movies_df[self.movies_df['movieId'] == similar_movie_id].iloc[0]
-                
+        for idx in similar_indices:
+            similar_movie_id = self.movie_idx_to_id[idx]
+            movie_info = self.movies_df[self.movies_df['movieId'] == similar_movie_id]
+            
+            if not movie_info.empty:
                 similar_movies.append({
-                    'movie_id': int(similar_movie_id),
-                    'title': movie_info['title'],
-                    'genres': movie_info['genres'],
+                    'movieId': int(similar_movie_id),
+                    'title': movie_info.iloc[0]['title'],
+                    'genres': movie_info.iloc[0]['genres'],
                     'similarity': float(similarities[idx])
                 })
         
         return similar_movies
-    
-    def get_movie_embedding_norm(self, movie_id: int) -> float:
-        """Get the norm of a movie's embedding (polarization measure)."""
-        if movie_id not in self.movieid_to_idx:
-            return 0.0
-        
-        movie_idx = self.movieid_to_idx[movie_id]
-        return float(np.linalg.norm(self.movie_embeddings[:, movie_idx]))
-    
-    def get_most_polarizing_movies(self, n_movies: int = 30) -> List[Dict]:
-        """Get most polarizing movies (highest embedding norms)."""
-        norms = np.array([np.linalg.norm(self.movie_embeddings[:, idx]) 
-                         for idx in range(self.n_movies)])
-        
-        top_indices = np.argsort(norms)[::-1][:n_movies]
-        
-        polarizing_movies = []
-        for idx in top_indices:
-            if idx < len(self.movie_ids):
-                movie_id = self.movie_ids[idx]
-                movie_info = self.movies_df[self.movies_df['movieId'] == movie_id].iloc[0]
-                
-                polarizing_movies.append({
-                    'movie_id': int(movie_id),
-                    'title': movie_info['title'],
-                    'genres': movie_info['genres'],
-                    'polarization': float(norms[idx])
-                })
-        
-        return polarizing_movies
-    
-    def get_least_polarizing_movies(self, n_movies: int = 30) -> List[Dict]:
-        """Get least polarizing movies (lowest embedding norms)."""
-        norms = np.array([np.linalg.norm(self.movie_embeddings[:, idx]) 
-                         for idx in range(self.n_movies)])
-        
-        top_indices = np.argsort(norms)[:n_movies]
-        
-        consensus_movies = []
-        for idx in top_indices:
-            if idx < len(self.movie_ids):
-                movie_id = self.movie_ids[idx]
-                movie_info = self.movies_df[self.movies_df['movieId'] == movie_id].iloc[0]
-                
-                consensus_movies.append({
-                    'movie_id': int(movie_id),
-                    'title': movie_info['title'],
-                    'genres': movie_info['genres'],
-                    'consensus': float(norms[idx])
-                })
-        
-        return consensus_movies
