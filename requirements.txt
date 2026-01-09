@@ -1,5 +1,7 @@
-streamlit
-numpy
-pandas
-numba
-scipy
+streamlit==1.29.0
+numpy==1.24.3
+pandas==2.0.3
+scikit-learn==1.3.0
+plotly==5.17.0
+pillow==10.1.0
+scipy==1.11.3
