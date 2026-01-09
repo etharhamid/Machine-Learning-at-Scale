@@ -17,7 +17,7 @@ MODEL_PATH = BASE_DIR / 'best_model.npz'
 # For GitHub raw content, use this format:
 # DATA_PATH = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO_NAME/main/data/movies.csv"
 # Or for local file:
-DATA_PATH = "https://raw.githubusercontent.com/etharhamid/Machine-Learning-at-Scale/main/data/movies.csv"
+DATA_PATH = BASE_DIR / 'data' / 'movies.csv'
 
 # Add src to system path so we can import modules
 if str(SRC_DIR) not in sys.path:
@@ -57,10 +57,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Insert your Google Drive File ID here
-# Example Link: https://drive.google.com/file/d/1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq/view?usp=sharing
-# The ID is: 1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq
-FILE_ID = '1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq' 
+# Google Drive File IDs
+# Get the ID from the share link: https://drive.google.com/file/d/FILE_ID_HERE/view?usp=sharing
+MODEL_FILE_ID = '1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq'  # Your model file
+MOVIES_FILE_ID = '1sRGLCqUlZHHIauj8dJK46nfBtGtJq12v?usp=drive_link'  # Replace with your movies.csv file ID 
 
 # ==========================================
 # 3. DATA LOADING & CACHING
@@ -68,65 +68,66 @@ FILE_ID = '1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq'
 @st.cache_resource
 def load_data_and_model():
     """
-    Downloads model from Drive if missing, then loads data and model.
+    Downloads model and movies.csv from Google Drive if missing, then loads them.
     Cached so it only runs once.
     """
     # 1. Download Model if it doesn't exist
     if not os.path.exists(MODEL_PATH):
-        url = f'https://drive.google.com/uc?id={FILE_ID}'
+        url = f'https://drive.google.com/uc?id={MODEL_FILE_ID}'
         try:
             with st.spinner("📥 Downloading model from Google Drive (100MB+)..."):
                 gdown.download(url, str(MODEL_PATH), quiet=False)
-            st.success("✅ Download complete!")
+            st.success("✅ Model download complete!")
         except Exception as e:
             st.error(f"❌ Failed to download model: {e}")
+            st.info("💡 Make sure the Google Drive link has 'Anyone with the link' sharing enabled")
             st.stop()
 
-    # 2. Load Movies Data
-    # Check if DATA_PATH is a URL or local file
-    if isinstance(DATA_PATH, str) and DATA_PATH.startswith('http'):
-        # Load from URL
+    # 2. Download Movies CSV if it doesn't exist
+    if not os.path.exists(DATA_PATH):
+        # Create data directory if it doesn't exist
+        os.makedirs(DATA_PATH.parent, exist_ok=True)
+        
+        url = f'https://drive.google.com/uc?id={MOVIES_FILE_ID}'
         try:
-            with st.spinner("📥 Loading movies data from URL..."):
-                movies_df = pd.read_csv(DATA_PATH)
-            if movies_df.empty or len(movies_df.columns) == 0:
-                st.error("❌ Movies data file is empty or invalid!")
-                st.stop()
+            with st.spinner("📥 Downloading movies.csv from Google Drive..."):
+                gdown.download(url, str(DATA_PATH), quiet=False)
+            st.success("✅ Movies data download complete!")
         except Exception as e:
-            st.error(f"❌ Failed to load data from URL: {e}")
-            st.info("💡 Make sure the URL points to a valid CSV file")
+            st.error(f"❌ Failed to download movies.csv: {e}")
+            st.info("💡 Make sure the Google Drive link has 'Anyone with the link' sharing enabled")
             st.stop()
-    else:
-        # Load from local file
-        if not os.path.exists(DATA_PATH):
-            st.error(f"❌ Data file not found: {DATA_PATH}")
-            st.info(f"💡 Expected location: {DATA_PATH}")
-            st.info("Please ensure movies.csv is in the data/ folder")
+
+    # 3. Load Movies Data
+    try:
+        # Check file size first
+        file_size = os.path.getsize(DATA_PATH)
+        if file_size == 0:
+            st.error(f"❌ Movies data file is empty: {DATA_PATH}")
+            # Delete empty file so it re-downloads next time
+            os.remove(DATA_PATH)
+            st.info("Please restart the app to re-download the file")
             st.stop()
         
-        try:
-            # Check file size first
-            file_size = os.path.getsize(DATA_PATH)
-            if file_size == 0:
-                st.error(f"❌ Movies data file is empty: {DATA_PATH}")
-                st.info("Please ensure movies.csv contains valid data")
-                st.stop()
-            
-            movies_df = load_movies_data(str(DATA_PATH))
-            
-            if movies_df.empty or len(movies_df.columns) == 0:
-                st.error("❌ Movies data file is empty or invalid!")
-                st.stop()
-                
-        except pd.errors.EmptyDataError:
-            st.error(f"❌ Movies data file is empty: {DATA_PATH}")
-            st.info("Please ensure movies.csv contains valid data with headers")
+        movies_df = load_movies_data(str(DATA_PATH))
+        
+        if movies_df.empty or len(movies_df.columns) == 0:
+            st.error("❌ Movies data file is empty or invalid!")
+            os.remove(DATA_PATH)
+            st.info("Please restart the app to re-download the file")
             st.stop()
-        except Exception as e:
-            st.error(f"❌ Failed to load movies data: {e}")
-            st.stop()
+            
+    except pd.errors.EmptyDataError:
+        st.error(f"❌ Movies data file is empty: {DATA_PATH}")
+        if os.path.exists(DATA_PATH):
+            os.remove(DATA_PATH)
+        st.info("Please restart the app to re-download the file")
+        st.stop()
+    except Exception as e:
+        st.error(f"❌ Failed to load movies data: {e}")
+        st.stop()
 
-    # 3. Initialize Recommender
+    # 4. Initialize Recommender
     try:
         recommender = MovieRecommender(str(MODEL_PATH), movies_df)
         return recommender, movies_df
