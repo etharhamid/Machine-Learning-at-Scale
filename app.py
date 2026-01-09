@@ -18,6 +18,47 @@ from src.utils import (
     format_genres
 )
 
+
+# Safe imports with error handling
+try:
+    import numpy as np
+    import pandas as pd
+    import plotly.graph_objects as go
+    import plotly.express as px
+except ImportError as e:
+    st.error(f"Import error: {e}")
+    st.stop()
+
+# Add src to path safely
+try:
+    src_path = Path(__file__).parent / 'src'
+    if src_path.exists():
+        sys.path.insert(0, str(src_path))
+except Exception as e:
+    st.warning(f"Path setup warning: {e}")
+
+# Import with error handling
+try:
+    from recommender import MovieRecommender
+    from utils import (
+        load_movies_data,
+        create_rating_distribution_plot,
+        create_similarity_plot,
+        create_polarization_plot,
+        format_genres
+    )
+except ImportError as e:
+    st.error(f"""
+    ❌ Import Error: {e}
+    
+    Please check that all files are in the correct directories:
+    - src/recommender.py
+    - src/utils.py
+    """)
+    st.stop()
+```
+
+
 # Page configuration
 st.set_page_config(
     page_title="Movie Recommender System",
