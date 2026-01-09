@@ -8,7 +8,7 @@ def download_model():
     file_id = "1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq"
     
     # Output path
-    output_path = "models/best_model.npz"
+    output_path = "best_model.npz"
     
     # Create models directory
     os.makedirs("models", exist_ok=True)
