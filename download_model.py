@@ -5,7 +5,7 @@ def download_model():
     """Download model from Google Drive."""
     
     # Your Google Drive file ID (get from shareable link)
-    file_id = "YOUR_FILE_ID_HERE"
+    file_id = "1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq"
     
     # Output path
     output_path = "models/best_model.npz"
