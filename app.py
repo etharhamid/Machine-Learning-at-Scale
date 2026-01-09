@@ -12,8 +12,13 @@ import gdown
 # Get the absolute path of the directory where app.py is located
 BASE_DIR = Path(__file__).parent
 SRC_DIR = BASE_DIR / 'src'
-DATA_PATH = BASE_DIR / 'data' / 'movies.csv'
+# DATA_PATH = BASE_DIR / 'data' / 'movies.csv'  <-- Comment this out
+DATA_PATH = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO_NAME/main/data/movies.csv"
 MODEL_PATH = BASE_DIR / 'best_model.npz'
+
+
+# The rest of your code remains the same:
+movies_df = load_movies_data(str(DATA_PATH))
 
 # Add src to system path so we can import modules
 if str(SRC_DIR) not in sys.path:
