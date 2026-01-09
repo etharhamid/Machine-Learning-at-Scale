@@ -43,13 +43,15 @@ def _predict_new_user(movie_indices, rating_values, V, b_m, lamda=0.02, gamma_u=
 st.set_page_config(page_title="MovieLens 32M Demo", layout="wide")
 st.title("🎬 MovieLens 32M - ALS Model Demo")
 
-# 3. Load Pre-Trained Weights
+# ... [Keep your imports and @njit function exactly as they are] ...
+
+# 3. Load Pre-Trained Weights (Robust Version)
 @st.cache_resource
 def load_data():
     # Load Metadata
     df_movies = pd.read_csv("movies.csv")
     
-    # Load Model (Match the new filenames)
+    # Load Model
     V = np.load("movie_embeddings.npy")
     b_m = np.load("movie_biases.npy")
     
@@ -57,15 +59,35 @@ def load_data():
     with open("movie_map.pkl", "rb") as f:
         movie_map = pickle.load(f)
         
-    # Create Reverse Map (Index -> Real ID)
-    # This is needed to look up the movie title after getting a recommendation index
+    # Reverse map for display
     idx_to_movieid = {v: k for k, v in movie_map.items()}
     
     return df_movies, V, b_m, movie_map, idx_to_movieid
 
+# --- REPLACE THE PREVIOUS TRY/EXCEPT BLOCK WITH THIS ---
+try:
+    # Initialize variables to None first to be safe
+    df_movies, V, b_m, movie_map, idx_to_movieid = None, None, None, None, None
+    
+    # Attempt to load
+    df_movies, V, b_m, movie_map, idx_to_movieid = load_data()
+
+except FileNotFoundError as e:
+    st.error(f"❌ File Not Found Error: {e}")
+    st.warning("Make sure you uploaded 'movies.csv', .npy files, and .pkl files to the root folder.")
+    st.stop()
+except Exception as e:
+    st.error(f"❌ An unexpected error occurred during loading: {e}")
+    st.stop()
+# -------------------------------------------------------
+
 # 4. Sidebar Controls
+# (Now this line won't run if the loading failed above)
 st.sidebar.header("Try the Model")
-selected_title = st.sidebar.selectbox("Select a movie you like:", df_movies['title'].unique())
+if df_movies is not None:
+    selected_title = st.sidebar.selectbox("Select a movie you like:", df_movies['title'].unique())
+else:
+    st.stop()
 
 if st.sidebar.button("Recommend"):
     # Get ID
