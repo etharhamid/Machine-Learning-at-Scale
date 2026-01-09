@@ -19,10 +19,9 @@ The project progresses from standard exploratory data analysis and dimensionalit
 
 ## 📂 Repository Structure
 
-| File | Description |
-| :--- | :--- |
-| `Full_Recommender_System.ipynb` | **Exploration & Analysis**: Covers EDA, data preprocessing, feature engineering, and dimensionality reduction (PCA) to understand the latent structure of the MovieLens data. |
-| `OptimizedVec_32M_Recommender_System.ipynb` | **Scale Implementation**: The high-performance engine. This notebook uses Numba and vectorized operations to perform similarity calculations on the full 32M dataset efficiently. |
+* `Recommender_System_32M.ipynb`: The baseline (naïve) Python implementation. Useful for understanding the core algorithm without optimization complexity.
+* `numba_Recommender_System_32M.ipynb`: The **production** code. Contains the Numba-optimized ALS kernels, custom Sparse Matrix classes (CSR/CSC), and the full training pipeline.
+* `random_search_results.csv`: The complete log of the 50-trial hyperparameter search.
 
 ## 📊 Dataset
 
@@ -41,11 +40,13 @@ This project utilizes the **MovieLens 32M** dataset, distinct for its size and c
 - **Optimization**: Numba (Just-In-Time compilation)
 - **Visualization**: Matplotlib, Seaborn
 
-## ⚡ Getting Started
+## 💻 Usage
 
-### Prerequisites
-
-Ensure you have Python installed. You can install the required dependencies using pip:
-
-```bash
-pip install pandas numpy matplotlib seaborn scikit-learn numba
+1.  **Install Dependencies:**
+    ```bash
+    pip install numpy pandas matplotlib seaborn numba
+    ```
+2.  **Download Data:**
+    Place the `ratings.csv` and `movies.csv` from the MovieLens 32M dataset in the root directory.
+3.  **Run the Notebook:**
+    Open `numba_Recommender_System_32M.ipynb` and execute the cells. The script handles data loading, sparse matrix construction, training, and visualization automatically.
