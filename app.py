@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import sys
+import os
+import gdown
 
 # Add src to path
 sys.path.append(str(Path(__file__).parent / 'src'))
@@ -70,20 +72,37 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
+# At the top of app.py, before loading the model
+MODEL_PATH = 'best_model.npz'
+GOOGLE_DRIVE_FILE_ID = '1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq'  # Replace with your file ID
+
 @st.cache_resource
-def load_recommender():
-    """Load the recommender system (cached)."""
+def download_and_load_model():
+    """Download model if not exists and load it."""
+    
+    # Check if model exists
+    if not os.path.exists(MODEL_PATH):
+        st.info("📥 Downloading model for the first time... This may take a minute.")
+        
+        # Create models directory
+        os.makedirs('models', exist_ok=True)
+        
+        # Download from Google Drive
+        url = f"https://drive.google.com/uc?id={GOOGLE_DRIVE_FILE_ID}"
+        
+        with st.spinner("Downloading model..."):
+            gdown.download(url, MODEL_PATH, quiet=False)
+        
+        st.success("✅ Model downloaded!")
+    
+    # Load the model
     movies_df = load_movies_data('data/movies.csv')
-    recommender = MovieRecommender('models/best_model.npz', movies_df)
+    recommender = MovieRecommender(MODEL_PATH, movies_df)
     return recommender, movies_df
 
-# Load data
-try:
-    recommender, movies_df = load_recommender()
-    st.success("✅ Model loaded successfully!")
-except Exception as e:
-    st.error(f"❌ Error loading model: {e}")
-    st.stop()
+# Use this instead of load_recommender
+recommender, movies_df = download_and_load_model()
 
 # Main header
 st.markdown('<div class="main-header">🎬 Movie Recommender System</div>', unsafe_allow_html=True)
