@@ -9,16 +9,6 @@ import gdown
 # Add src to path
 sys.path.append(str(Path(__file__).parent / 'src'))
 
-from src.recommender import MovieRecommender
-from src.utils import (
-    load_movies_data,
-    create_rating_distribution_plot,
-    create_similarity_plot,
-    create_polarization_plot,
-    format_genres
-)
-
-
 # Safe imports with error handling
 try:
     import numpy as np
@@ -39,8 +29,8 @@ except Exception as e:
 
 # Import with error handling
 try:
-    from recommender import MovieRecommender
-    from utils import (
+    from src.recommender import MovieRecommender
+    from src.utils import (
         load_movies_data,
         create_rating_distribution_plot,
         create_similarity_plot,
