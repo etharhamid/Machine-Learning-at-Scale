@@ -17,7 +17,7 @@ MODEL_PATH = BASE_DIR / 'best_model.npz'
 # For GitHub raw content, use this format:
 # DATA_PATH = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO_NAME/main/data/movies.csv"
 # Or for local file:
-DATA_PATH = BASE_DIR / 'data' / 'movies.csv'
+DATA_PATH = "https://raw.githubusercontent.com/etharhamid/Machine-Learning-at-Scale/main/data/movies.csv"
 
 # Add src to system path so we can import modules
 if str(SRC_DIR) not in sys.path:
@@ -87,16 +87,44 @@ def load_data_and_model():
     if isinstance(DATA_PATH, str) and DATA_PATH.startswith('http'):
         # Load from URL
         try:
-            movies_df = pd.read_csv(DATA_PATH)
+            with st.spinner("📥 Loading movies data from URL..."):
+                movies_df = pd.read_csv(DATA_PATH)
+            if movies_df.empty or len(movies_df.columns) == 0:
+                st.error("❌ Movies data file is empty or invalid!")
+                st.stop()
         except Exception as e:
             st.error(f"❌ Failed to load data from URL: {e}")
+            st.info("💡 Make sure the URL points to a valid CSV file")
             st.stop()
     else:
         # Load from local file
         if not os.path.exists(DATA_PATH):
             st.error(f"❌ Data file not found: {DATA_PATH}")
+            st.info(f"💡 Expected location: {DATA_PATH}")
+            st.info("Please ensure movies.csv is in the data/ folder")
             st.stop()
-        movies_df = load_movies_data(str(DATA_PATH))
+        
+        try:
+            # Check file size first
+            file_size = os.path.getsize(DATA_PATH)
+            if file_size == 0:
+                st.error(f"❌ Movies data file is empty: {DATA_PATH}")
+                st.info("Please ensure movies.csv contains valid data")
+                st.stop()
+            
+            movies_df = load_movies_data(str(DATA_PATH))
+            
+            if movies_df.empty or len(movies_df.columns) == 0:
+                st.error("❌ Movies data file is empty or invalid!")
+                st.stop()
+                
+        except pd.errors.EmptyDataError:
+            st.error(f"❌ Movies data file is empty: {DATA_PATH}")
+            st.info("Please ensure movies.csv contains valid data with headers")
+            st.stop()
+        except Exception as e:
+            st.error(f"❌ Failed to load movies data: {e}")
+            st.stop()
 
     # 3. Initialize Recommender
     try:
