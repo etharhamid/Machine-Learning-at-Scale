@@ -1,3 +1,6 @@
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://machine-learning-at-scale-bvceyhyya6dhafws5dwwdx.streamlit.app/)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-Repository-181717?logo=github)](https://github.com/etharhamid/Machine-Learning-at-Scale.git)
+
 # Machine Learning at Scale: MovieLens 32M Recommender System
 
 This repository contains the implementation of a high-performance **Matrix Factorization** recommender system scaled to the **MovieLens 32M** dataset (32 million ratings, 200k users, 84k movies).
