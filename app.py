@@ -93,18 +93,19 @@ recommender, movies_df = load_data_and_model()
 # ==========================================
 # 4. HELPER FUNCTIONS
 # ==========================================
-def get_tmdb_poster(imdb_id, size='w342'):
-    """Get poster URL from TMDb using IMDb ID"""
-    if pd.isna(imdb_id):
+def get_poster_url(movie_info):
+    """Get movie poster URL from TMDb using tmdbId"""
+    if 'tmdbId' not in movie_info.columns or movie_info.empty:
         return None
+    
+    tmdb_id = movie_info.iloc[0]['tmdbId']
+    if pd.isna(tmdb_id):
+        return None
+    
     try:
-        # Format IMDb ID (must be tt followed by 7 digits)
-        imdb_id = str(int(imdb_id))
-        imdb_id = f"tt{imdb_id.zfill(7)}"
-        
-        # Use TMDb API (no key needed for images)
-        # This is a simplified approach - ideally use TMDb API with proper ID conversion
-        return f"https://img.omdbapi.com/?i={imdb_id}&apikey=3e8f8b3e"
+        # TMDb image URL - no API key needed for images
+        tmdb_id = int(tmdb_id)
+        return f"https://image.tmdb.org/t/p/w342/{tmdb_id}.jpg"
     except:
         return None
 
@@ -217,16 +218,22 @@ if 'rated_movies' not in st.session_state:
     st.session_state.rated_movies = []
 if 'recs' not in st.session_state:
     st.session_state.recs = []
+if 'auto_recommend' not in st.session_state:
+    st.session_state.auto_recommend = False
 
-# Auto-generate recommendations when ratings change
-def update_recommendations():
+# Function to generate recommendations
+def generate_recommendations():
     if len(st.session_state.rated_movies) > 0:
-        user_ratings = [(m_id, rating) for m_id, rating, _ in st.session_state.rated_movies]
-        st.session_state.recs = recommender.recommend_from_ratings(
-            user_ratings, 
-            n_recommendations=10,
-            iterations=20
-        )
+        with st.spinner("🎬 Generating recommendations..."):
+            user_ratings = [(m_id, rating) for m_id, rating, _ in st.session_state.rated_movies]
+            st.session_state.recs = recommender.recommend_from_ratings(
+                user_ratings, 
+                n_recommendations=10,
+                iterations=20
+            )
+            st.success("✨ Recommendations updated!")
+    else:
+        st.session_state.recs = []
 
 # Main layout
 col_left, col_right = st.columns([2, 3], gap="large")
@@ -260,7 +267,6 @@ with col_left:
                     movie_title = matches[matches['movieId']==selected_movie]['title'].iloc[0]
                     if selected_movie not in [m[0] for m in st.session_state.rated_movies]:
                         st.session_state.rated_movies.append((selected_movie, rating, movie_title))
-                        update_recommendations()
                         st.rerun()
                     else:
                         st.warning("⚠️ Already rated!")
@@ -284,13 +290,19 @@ with col_left:
             with col2:
                 if st.button("🗑️", key=f"del_{i}", use_container_width=True):
                     st.session_state.rated_movies.pop(i)
-                    update_recommendations()
                     st.rerun()
         
-        if st.button("🔄 Clear All", use_container_width=True):
-            st.session_state.rated_movies = []
-            st.session_state.recs = []
-            st.rerun()
+        st.markdown("---")
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("🎬 Get Recommendations", use_container_width=True, type="primary"):
+                generate_recommendations()
+                st.rerun()
+        with col_btn2:
+            if st.button("🔄 Clear All", use_container_width=True):
+                st.session_state.rated_movies = []
+                st.session_state.recs = []
+                st.rerun()
     else:
         st.markdown("""
         <div class="info-box">
@@ -312,15 +324,12 @@ with col_right:
             col_poster, col_info = st.columns([1, 3])
             
             with col_poster:
-                # Try to show poster
+                # Try to show poster using TMDb
                 poster_shown = False
-                if not movie_info.empty and 'imdbId' in movie_info.columns:
-                    imdb_id = movie_info.iloc[0]['imdbId']
-                    if pd.notna(imdb_id):
+                if not movie_info.empty:
+                    poster_url = get_poster_url(movie_info)
+                    if poster_url:
                         try:
-                            # Try OMDb poster
-                            imdb_str = f"tt{str(int(imdb_id)).zfill(7)}"
-                            poster_url = f"https://img.omdbapi.com/?i={imdb_str}&h=300&apikey=3e8f8b3e"
                             st.image(poster_url, use_column_width=True)
                             poster_shown = True
                         except:
