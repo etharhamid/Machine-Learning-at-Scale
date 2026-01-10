@@ -43,15 +43,14 @@ LINKS_FILE_ID = '1uVWSBWCtCe7YrekhshK_CjK_v_w-Bdkj'
 # ==========================================
 # 3. DATA LOADING
 # ==========================================
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def load_data_and_model():
     # Download model
     if not os.path.exists(MODEL_PATH):
         os.makedirs(MODEL_PATH.parent, exist_ok=True)
         url = f'https://drive.google.com/uc?id={MODEL_FILE_ID}'
         try:
-            with st.spinner("📥 Downloading model..."):
-                gdown.download(url, str(MODEL_PATH), quiet=False)
+            gdown.download(url, str(MODEL_PATH), quiet=False)
         except Exception as e:
             st.error(f"❌ Failed to download model: {e}")
             st.stop()
@@ -61,8 +60,7 @@ def load_data_and_model():
         os.makedirs(DATA_PATH.parent, exist_ok=True)
         url = f'https://drive.google.com/uc?id={MOVIES_FILE_ID}'
         try:
-            with st.spinner("📥 Downloading movies data..."):
-                gdown.download(url, str(DATA_PATH), quiet=False)
+            gdown.download(url, str(DATA_PATH), quiet=False)
         except Exception as e:
             st.error(f"❌ Failed to download movies: {e}")
             st.stop()
@@ -72,10 +70,9 @@ def load_data_and_model():
         os.makedirs(LINKS_PATH.parent, exist_ok=True)
         url = f'https://drive.google.com/uc?id={LINKS_FILE_ID}'
         try:
-            with st.spinner("📥 Downloading links data..."):
-                gdown.download(url, str(LINKS_PATH), quiet=False)
+            gdown.download(url, str(LINKS_PATH), quiet=False)
         except:
-            st.warning("⚠️ Could not download links.csv - posters may not work")
+            pass
     
     # Load data
     movies_df = load_movies_data(str(DATA_PATH))
@@ -84,9 +81,8 @@ def load_data_and_model():
         try:
             links_df = pd.read_csv(LINKS_PATH)
             movies_df = movies_df.merge(links_df, on='movieId', how='left')
-            st.success(f"✅ Loaded {len(movies_df[movies_df['tmdbId'].notna()])} movies with poster data")
         except Exception as e:
-            st.warning(f"⚠️ Could not load links: {e}")
+            pass
     
     recommender = MovieRecommender(str(MODEL_PATH), movies_df)
     return recommender, movies_df
@@ -97,37 +93,38 @@ recommender, movies_df = load_data_and_model()
 # 4. HELPER FUNCTIONS
 # ==========================================
 def get_poster_url(movie_id):
-    """Get movie poster URL from TMDb"""
-    movie_info = movies_df[movies_df['movieId'] == movie_id]
-    
-    if movie_info.empty:
-        return None
-    
-    # Check if tmdbId column exists
-    if 'tmdbId' not in movie_info.columns:
-        return None
-    
-    tmdb_id = movie_info.iloc[0]['tmdbId']
-    
-    if pd.isna(tmdb_id):
-        return None
-    
+    """Get movie poster URL from TMDb with extensive debugging"""
     try:
+        movie_info = movies_df[movies_df['movieId'] == movie_id]
+        
+        if movie_info.empty:
+            return None
+        
+        # Check if tmdbId column exists
+        if 'tmdbId' not in movie_info.columns:
+            return None
+        
+        tmdb_id = movie_info.iloc[0]['tmdbId']
+        
+        # Check if tmdbId is valid
+        if pd.isna(tmdb_id) or tmdb_id == '' or tmdb_id == 0:
+            return None
+        
+        # Convert to integer
         tmdb_id = int(float(tmdb_id))
-        # TMDb poster URL - multiple sizes available
-        return f"https://image.tmdb.org/t/p/w342/{tmdb_id}.jpg"
-    except:
+        
+        # TMDb image base URLs - try multiple sizes
+        base_urls = [
+            f"https://image.tmdb.org/t/p/w342/{tmdb_id}.jpg",
+            f"https://image.tmdb.org/t/p/w500/{tmdb_id}.jpg",
+            f"https://image.tmdb.org/t/p/original/{tmdb_id}.jpg"
+        ]
+        
+        # Return the first URL (we'll let Streamlit handle the loading)
+        return base_urls[0]
+        
+    except Exception as e:
         return None
-
-def verify_poster_url(url):
-    """Check if poster URL is accessible"""
-    if not url:
-        return False
-    try:
-        response = requests.head(url, timeout=2)
-        return response.status_code == 200
-    except:
-        return False
 
 # ==========================================
 # 5. CUSTOM CSS
@@ -265,40 +262,48 @@ col_left, col_right = st.columns([2, 3], gap="large")
 with col_left:
     st.markdown("### 🎬 Rate Movies")
     
-    # Create a searchable dropdown using selectbox with search
-    st.markdown("##### Search for a movie")
+    # Single search box that filters and shows dropdown
+    st.markdown("##### Type to search movies")
     
-    # Add a text input for filtering
-    search_query = st.text_input("Type to search...", "", key="search_input", label_visibility="collapsed")
+    # Search input
+    search_query = st.text_input(
+        "Search for a movie", 
+        "", 
+        placeholder="Start typing a movie name...",
+        key="search_input"
+    )
     
-    # Filter movies based on search
-    if search_query:
-        filtered_movies = movies_df[movies_df['title'].str.contains(search_query, case=False, na=False)].head(50)
-    else:
-        filtered_movies = movies_df.head(50)  # Show top 50 by default
-    
-    if not filtered_movies.empty:
-        # Create dropdown with filtered results
-        selected_movie = st.selectbox(
-            "Select a movie",
-            options=filtered_movies['movieId'].tolist(),
-            format_func=lambda x: filtered_movies[filtered_movies['movieId']==x]['title'].iloc[0],
-            key="movie_select",
-            label_visibility="collapsed"
-        )
+    # Show dropdown only if user is searching
+    if search_query and len(search_query) >= 2:
+        filtered_movies = movies_df[
+            movies_df['title'].str.contains(search_query, case=False, na=False)
+        ].head(20)
         
-        # Rating slider
-        rating = st.slider("⭐ Your Rating", 0.5, 5.0, 4.0, 0.5, key="rating_slider")
-        
-        # Add rating button
-        if st.button("➕ Add Rating", use_container_width=True, type="primary"):
-            movie_title = filtered_movies[filtered_movies['movieId']==selected_movie]['title'].iloc[0]
-            if selected_movie not in [m[0] for m in st.session_state.rated_movies]:
-                st.session_state.rated_movies.append((selected_movie, rating, movie_title))
-                st.success(f"✅ Added: {movie_title}")
-                st.rerun()
-            else:
-                st.warning("⚠️ Already rated!")
+        if not filtered_movies.empty:
+            # Dropdown appears with filtered results
+            selected_movie = st.selectbox(
+                "Select from results",
+                options=filtered_movies['movieId'].tolist(),
+                format_func=lambda x: filtered_movies[filtered_movies['movieId']==x]['title'].iloc[0],
+                key="movie_select"
+            )
+            
+            # Rating slider
+            rating = st.slider("⭐ Your Rating", 0.5, 5.0, 4.0, 0.5, key="rating_slider")
+            
+            # Add rating button
+            if st.button("➕ Add Rating", use_container_width=True, type="primary"):
+                movie_title = filtered_movies[filtered_movies['movieId']==selected_movie]['title'].iloc[0]
+                if selected_movie not in [m[0] for m in st.session_state.rated_movies]:
+                    st.session_state.rated_movies.append((selected_movie, rating, movie_title))
+                    st.success(f"✅ Added: {movie_title}")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ Already rated!")
+        else:
+            st.info("No movies found. Try a different search.")
+    elif search_query and len(search_query) < 2:
+        st.info("Type at least 2 characters to search...")
     
     # Recommend button (shows when there are rated movies)
     if st.session_state.rated_movies:
@@ -354,10 +359,10 @@ with col_right:
                 poster_url = get_poster_url(rec['movieId'])
                 
                 if poster_url:
-                    try:
-                        st.image(poster_url, use_column_width=True, caption="")
-                    except:
-                        st.markdown('<div class="poster-placeholder">🎬</div>', unsafe_allow_html=True)
+                    # Display image with error handling
+                    st.markdown(f'<img src="{poster_url}" class="poster-image" onerror="this.style.display=\'none\'">', unsafe_allow_html=True)
+                    # Fallback if image fails to load
+                    st.markdown('<div class="poster-placeholder" style="display:none;" id="fallback-{idx}">🎬</div>'.format(idx=idx), unsafe_allow_html=True)
                 else:
                     st.markdown('<div class="poster-placeholder">🎬</div>', unsafe_allow_html=True)
             
