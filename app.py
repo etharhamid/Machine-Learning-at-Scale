@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import os
 import gdown
+import requests
 
 # ==========================================
 # 1. PATH & IMPORT SETUP
@@ -68,12 +69,13 @@ def load_data_and_model():
     
     # Download links
     if not os.path.exists(LINKS_PATH):
+        os.makedirs(LINKS_PATH.parent, exist_ok=True)
         url = f'https://drive.google.com/uc?id={LINKS_FILE_ID}'
         try:
             with st.spinner("📥 Downloading links data..."):
                 gdown.download(url, str(LINKS_PATH), quiet=False)
         except:
-            pass
+            st.warning("⚠️ Could not download links.csv - posters may not work")
     
     # Load data
     movies_df = load_movies_data(str(DATA_PATH))
@@ -82,8 +84,9 @@ def load_data_and_model():
         try:
             links_df = pd.read_csv(LINKS_PATH)
             movies_df = movies_df.merge(links_df, on='movieId', how='left')
-        except:
-            pass
+            st.success(f"✅ Loaded {len(movies_df[movies_df['tmdbId'].notna()])} movies with poster data")
+        except Exception as e:
+            st.warning(f"⚠️ Could not load links: {e}")
     
     recommender = MovieRecommender(str(MODEL_PATH), movies_df)
     return recommender, movies_df
@@ -93,21 +96,38 @@ recommender, movies_df = load_data_and_model()
 # ==========================================
 # 4. HELPER FUNCTIONS
 # ==========================================
-def get_poster_url(movie_info):
-    """Get movie poster URL from TMDb using tmdbId"""
-    if 'tmdbId' not in movie_info.columns or movie_info.empty:
+def get_poster_url(movie_id):
+    """Get movie poster URL from TMDb"""
+    movie_info = movies_df[movies_df['movieId'] == movie_id]
+    
+    if movie_info.empty:
+        return None
+    
+    # Check if tmdbId column exists
+    if 'tmdbId' not in movie_info.columns:
         return None
     
     tmdb_id = movie_info.iloc[0]['tmdbId']
+    
     if pd.isna(tmdb_id):
         return None
     
     try:
-        # TMDb image URL - no API key needed for images
-        tmdb_id = int(tmdb_id)
+        tmdb_id = int(float(tmdb_id))
+        # TMDb poster URL - multiple sizes available
         return f"https://image.tmdb.org/t/p/w342/{tmdb_id}.jpg"
     except:
         return None
+
+def verify_poster_url(url):
+    """Check if poster URL is accessible"""
+    if not url:
+        return False
+    try:
+        response = requests.head(url, timeout=2)
+        return response.status_code == 200
+    except:
+        return False
 
 # ==========================================
 # 5. CUSTOM CSS
@@ -160,14 +180,24 @@ st.markdown("""
         margin-right: 0.5rem;
     }
     
-    /* Poster placeholder */
+    /* Poster styles */
     .poster-placeholder {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         border-radius: 12px;
-        padding: 2rem 1rem;
+        padding: 3rem 1rem;
         text-align: center;
-        font-size: 3rem;
+        font-size: 4rem;
         box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        min-height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .poster-image {
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        width: 100%;
     }
     
     /* Rated movie item */
@@ -218,22 +248,16 @@ if 'rated_movies' not in st.session_state:
     st.session_state.rated_movies = []
 if 'recs' not in st.session_state:
     st.session_state.recs = []
-if 'auto_recommend' not in st.session_state:
-    st.session_state.auto_recommend = False
 
 # Function to generate recommendations
 def generate_recommendations():
     if len(st.session_state.rated_movies) > 0:
-        with st.spinner("🎬 Generating recommendations..."):
-            user_ratings = [(m_id, rating) for m_id, rating, _ in st.session_state.rated_movies]
-            st.session_state.recs = recommender.recommend_from_ratings(
-                user_ratings, 
-                n_recommendations=10,
-                iterations=20
-            )
-            st.success("✨ Recommendations updated!")
-    else:
-        st.session_state.recs = []
+        user_ratings = [(m_id, rating) for m_id, rating, _ in st.session_state.rated_movies]
+        st.session_state.recs = recommender.recommend_from_ratings(
+            user_ratings, 
+            n_recommendations=10,
+            iterations=20
+        )
 
 # Main layout
 col_left, col_right = st.columns([2, 3], gap="large")
@@ -241,39 +265,51 @@ col_left, col_right = st.columns([2, 3], gap="large")
 with col_left:
     st.markdown("### 🎬 Rate Movies")
     
-    # Search box
-    search_movie = st.text_input(
-        "",
-        placeholder="🔍 Search for a movie...",
-        label_visibility="collapsed"
-    )
+    # Create a searchable dropdown using selectbox with search
+    st.markdown("##### Search for a movie")
     
-    if search_movie:
-        matches = movies_df[movies_df['title'].str.contains(search_movie, case=False, na=False)].head(10)
+    # Add a text input for filtering
+    search_query = st.text_input("Type to search...", "", key="search_input", label_visibility="collapsed")
+    
+    # Filter movies based on search
+    if search_query:
+        filtered_movies = movies_df[movies_df['title'].str.contains(search_query, case=False, na=False)].head(50)
+    else:
+        filtered_movies = movies_df.head(50)  # Show top 50 by default
+    
+    if not filtered_movies.empty:
+        # Create dropdown with filtered results
+        selected_movie = st.selectbox(
+            "Select a movie",
+            options=filtered_movies['movieId'].tolist(),
+            format_func=lambda x: filtered_movies[filtered_movies['movieId']==x]['title'].iloc[0],
+            key="movie_select",
+            label_visibility="collapsed"
+        )
         
-        if not matches.empty:
-            selected_movie = st.selectbox(
-                "Select a movie",
-                options=matches['movieId'].tolist(),
-                format_func=lambda x: matches[matches['movieId']==x]['title'].iloc[0],
-                label_visibility="collapsed"
-            )
-            
-            col_a, col_b = st.columns([3, 1])
-            with col_a:
-                rating = st.slider("⭐ Your Rating", 0.5, 5.0, 4.0, 0.5, label_visibility="collapsed")
-            with col_b:
-                if st.button("➕ Add", use_container_width=True):
-                    movie_title = matches[matches['movieId']==selected_movie]['title'].iloc[0]
-                    if selected_movie not in [m[0] for m in st.session_state.rated_movies]:
-                        st.session_state.rated_movies.append((selected_movie, rating, movie_title))
-                        st.rerun()
-                    else:
-                        st.warning("⚠️ Already rated!")
-        else:
-            st.info("No movies found. Try a different search.")
+        # Rating slider
+        rating = st.slider("⭐ Your Rating", 0.5, 5.0, 4.0, 0.5, key="rating_slider")
+        
+        # Add rating button
+        if st.button("➕ Add Rating", use_container_width=True, type="primary"):
+            movie_title = filtered_movies[filtered_movies['movieId']==selected_movie]['title'].iloc[0]
+            if selected_movie not in [m[0] for m in st.session_state.rated_movies]:
+                st.session_state.rated_movies.append((selected_movie, rating, movie_title))
+                st.success(f"✅ Added: {movie_title}")
+                st.rerun()
+            else:
+                st.warning("⚠️ Already rated!")
     
-    # Show rated movies
+    # Recommend button (shows when there are rated movies)
+    if st.session_state.rated_movies:
+        st.markdown("---")
+        if st.button("🎬 Get Recommendations", use_container_width=True, type="primary", key="recommend_btn"):
+            with st.spinner("🎬 Generating recommendations..."):
+                generate_recommendations()
+            st.success("✨ Recommendations ready!")
+            st.rerun()
+    
+    # Show rated movies below
     if st.session_state.rated_movies:
         st.markdown("---")
         st.markdown("### 📝 Your Ratings")
@@ -292,22 +328,15 @@ with col_left:
                     st.session_state.rated_movies.pop(i)
                     st.rerun()
         
-        st.markdown("---")
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            if st.button("🎬 Get Recommendations", use_container_width=True, type="primary"):
-                generate_recommendations()
-                st.rerun()
-        with col_btn2:
-            if st.button("🔄 Clear All", use_container_width=True):
-                st.session_state.rated_movies = []
-                st.session_state.recs = []
-                st.rerun()
+        if st.button("🔄 Clear All Ratings", use_container_width=True):
+            st.session_state.rated_movies = []
+            st.session_state.recs = []
+            st.rerun()
     else:
         st.markdown("""
         <div class="info-box">
             <strong>👋 Get Started!</strong><br>
-            Search and rate a few movies you've seen to get personalized recommendations.
+            Search and rate movies you've seen to get personalized recommendations.
         </div>
         """, unsafe_allow_html=True)
 
@@ -319,23 +348,17 @@ with col_right:
         st.markdown("<br>", unsafe_allow_html=True)
         
         for idx, rec in enumerate(st.session_state.recs, 1):
-            movie_info = movies_df[movies_df['movieId'] == rec['movieId']]
-            
             col_poster, col_info = st.columns([1, 3])
             
             with col_poster:
-                # Try to show poster using TMDb
-                poster_shown = False
-                if not movie_info.empty:
-                    poster_url = get_poster_url(movie_info)
-                    if poster_url:
-                        try:
-                            st.image(poster_url, use_column_width=True)
-                            poster_shown = True
-                        except:
-                            pass
+                poster_url = get_poster_url(rec['movieId'])
                 
-                if not poster_shown:
+                if poster_url:
+                    try:
+                        st.image(poster_url, use_column_width=True, caption="")
+                    except:
+                        st.markdown('<div class="poster-placeholder">🎬</div>', unsafe_allow_html=True)
+                else:
                     st.markdown('<div class="poster-placeholder">🎬</div>', unsafe_allow_html=True)
             
             with col_info:
@@ -355,7 +378,7 @@ with col_right:
         st.markdown("""
         <div class="info-box">
             <strong>🎯 No recommendations yet</strong><br>
-            Rate some movies on the left to see personalized recommendations here.
+            Rate some movies and click "Get Recommendations" to see personalized suggestions here.
         </div>
         """, unsafe_allow_html=True)
 
