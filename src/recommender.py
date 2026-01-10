@@ -91,58 +91,86 @@ class MovieRecommender:
                 return data
             elif isinstance(data, np.ndarray):
                 if data.dtype == object:
-                    # Object array - try to get the dict
                     if data.shape == ():
-                        # 0-d array, use item()
                         return data.item()
                     elif data.size == 1:
-                        # Single element array
                         return data.flat[0]
                     else:
-                        # Shouldn't happen for dict storage
                         raise ValueError(f"Unexpected array shape for dict: {data.shape}")
                 else:
-                    # Not an object array
                     return data
             else:
                 return data
+        
+        # Helper to normalize dict keys to integers
+        def normalize_dict(d):
+            """Convert float keys to int and ensure proper types"""
+            return {int(float(k)): int(float(v)) for k, v in d.items()}
         
         # First try to find movie_id -> idx mapping
         for key in movie_map_keys:
             if key in model_data.files:
                 try:
-                    self.movie_id_map = extract_dict(model_data[key])
-                    if isinstance(self.movie_id_map, dict):
-                        self.idx_to_movie_id = {v: k for k, v in self.movie_id_map.items()}
-                        print(f"✓ Loaded movie_id -> idx map from key: '{key}'")
+                    data = extract_dict(model_data[key])
+                    if isinstance(data, dict):
+                        # Normalize the dictionary
+                        data = normalize_dict(data)
+                        
+                        # Check if it's movieid->idx or idx->movieid by looking at key range
+                        first_key = list(data.keys())[0]
+                        first_val = list(data.values())[0]
+                        
+                        # If keys are large numbers (movie IDs) and values are small (indices)
+                        if first_key > 1000 and first_val < 100000:
+                            self.movie_id_map = data
+                            self.idx_to_movie_id = {v: k for k, v in data.items()}
+                            print(f"✓ Loaded movie_id -> idx map from '{key}' (movieid->idx format)")
+                        # If keys are small (indices) and values are large (movie IDs)
+                        elif first_key < 100000 and first_val > 1000:
+                            self.idx_to_movie_id = data
+                            self.movie_id_map = {v: k for k, v in data.items()}
+                            print(f"✓ Loaded movie_id -> idx map from '{key}' (idx->movieid format, reversed)")
+                        else:
+                            # Ambiguous, assume based on key name
+                            if 'idx_to' in key.lower():
+                                self.idx_to_movie_id = data
+                                self.movie_id_map = {v: k for k, v in data.items()}
+                                print(f"✓ Loaded movie_id -> idx map from '{key}' (reversed based on key name)")
+                            else:
+                                self.movie_id_map = data
+                                self.idx_to_movie_id = {v: k for k, v in data.items()}
+                                print(f"✓ Loaded movie_id -> idx map from '{key}' (direct based on key name)")
                         break
                 except Exception as e:
                     print(f"⚠ Failed to load from '{key}': {e}")
                     continue
         
-        # If not found, try idx -> movie_id mapping (reverse it)
+        # If still not found, try idx -> movie_id keys
         if self.movie_id_map is None:
             for key in idx_to_movie_keys:
                 if key in model_data.files:
                     try:
-                        self.idx_to_movie_id = extract_dict(model_data[key])
-                        if isinstance(self.idx_to_movie_id, dict):
-                            self.movie_id_map = {v: k for k, v in self.idx_to_movie_id.items()}
-                            print(f"✓ Loaded idx -> movie_id map from key: '{key}' (reversed)")
+                        data = extract_dict(model_data[key])
+                        if isinstance(data, dict):
+                            data = normalize_dict(data)
+                            self.idx_to_movie_id = data
+                            self.movie_id_map = {v: k for k, v in data.items()}
+                            print(f"✓ Loaded idx -> movie_id map from '{key}' (reversed)")
                             break
-                        else:
-                            print(f"⚠ Data from '{key}' is not a dict, got: {type(self.idx_to_movie_id)}")
-                            self.idx_to_movie_id = None
                     except Exception as e:
                         print(f"⚠ Failed to load from '{key}': {e}")
                         continue
         
         if self.movie_id_map is None:
             print("⚠ No movie ID map found, creating from dataframe...")
-            # Create mapping from dataframe
             self.movie_id_map = {row['movieId']: idx 
                                 for idx, row in movies_df.iterrows()}
             self.idx_to_movie_id = {v: k for k, v in self.movie_id_map.items()}
+        
+        # Verify the mapping makes sense
+        print(f"  Mapping: {len(self.movie_id_map)} entries")
+        sample_items = list(self.movie_id_map.items())[:3]
+        print(f"  Sample (movieid->idx): {sample_items}")
         
         # Load movie rating counts if available (for filtering)
         count_keys = ['movie_counts', 'movie_ptr', 'counts', 'n_ratings']
@@ -230,15 +258,12 @@ class MovieRecommender:
         scores = np.zeros(n_movies, dtype=np.float64)
         
         for m in prange(n_movies):
-            # Filter out movies with too few ratings
-            if movie_counts[m] < min_count:
-                scores[m] = -999.0  # Very low score to exclude
-            else:
-                # Dot product
-                dot_val = 0.0
-                for f in range(k):
-                    dot_val += dummy_emb[f] * V[f, m]
-                scores[m] = dot_val + (b_m[m] * 0.05)
+            # Dot product - NOTE: No filtering by rating count for now
+            dot_val = 0.0
+            for f in range(k):
+                dot_val += dummy_emb[f] * V[f, m]
+            # Use same formula as your notebook: dot + (bias * 0.05)
+            scores[m] = dot_val + (b_m[m] * 0.05)
         
         return scores
     
