@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -73,7 +74,7 @@ MODEL_FILE_ID = '1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq'
 MOVIES_FILE_ID = '1f7ImoZRL4C9x_ZzSG4qhTCunV2lVvpD8'
 LINKS_FILE_ID = '1-bh3vGZ0DR_aOCNMZLLz0YX8KYy5xHxu'
 
-# OMDb API Key (get free key at http://www.omdbapi.com/apikey.aspx)
+# OMDb API Key
 try:
     OMDB_API_KEY = st.secrets["OMDB_API_KEY"]
 except:
@@ -93,7 +94,7 @@ def get_poster_url(imdb_id):
         return None
     
     try:
-        # Format IMDb ID (should be like tt0111161)
+        # Format IMDb ID
         if isinstance(imdb_id, (int, float)):
             imdb_id = f"tt{int(imdb_id):07d}"
         elif not str(imdb_id).startswith('tt'):
@@ -116,7 +117,6 @@ def get_poster_url(imdb_id):
 
 def generate_poster_placeholder(title):
     """Generate a nice-looking poster placeholder with blue gradient."""
-    # Using specific blue shades for consistency
     color1 = "#4A90E2" # Medium Blue
     color2 = "#81D4FA" # Light Blue
     
@@ -177,15 +177,9 @@ def download_file_from_gdrive(file_id, output_path, file_description):
 def load_data_and_model():
     """Downloads and loads all required data and model."""
     
-    # Download model
-    if not download_file_from_gdrive(MODEL_FILE_ID, MODEL_PATH, "model"):
-        st.stop()
-    
-    # Download movies.csv
-    if not download_file_from_gdrive(MOVIES_FILE_ID, DATA_PATH, "movies.csv"):
-        st.stop()
-    
-    # Download links.csv (optional)
+    # Download files
+    if not download_file_from_gdrive(MODEL_FILE_ID, MODEL_PATH, "model"): st.stop()
+    if not download_file_from_gdrive(MOVIES_FILE_ID, DATA_PATH, "movies.csv"): st.stop()
     download_file_from_gdrive(LINKS_FILE_ID, LINKS_PATH, "links.csv")
     
     # Load movies data
@@ -196,7 +190,7 @@ def load_data_and_model():
             st.error("❌ Movies data file is empty!")
             st.stop()
         
-        # Load and merge links data if available
+        # Merge links if available
         if os.path.exists(LINKS_PATH):
             try:
                 links_df = pd.read_csv(LINKS_PATH)
@@ -214,9 +208,6 @@ def load_data_and_model():
         return recommender, movies_df
     except Exception as e:
         st.error(f"❌ Error initializing recommender: {e}")
-        import traceback
-        with st.expander("Show full error traceback"):
-            st.code(traceback.format_exc())
         st.stop()
 
 
@@ -226,19 +217,17 @@ def load_data_and_model():
 
 st.markdown("""
 <style>
-    /* Fix: Increase top padding so header isn't hidden */
     .block-container {
         padding-top: 5rem !important;
         padding-bottom: 2rem !important;
     }
     
-    /* Main Header Styling - Light Blue Theme */
     .main-header { 
         font-size: 3rem; 
         font-weight: 800; 
         text-align: center; 
-        color: #4A90E2; /* Dodger Blue */
-        margin-top: -3rem !important; /* Pull it up slightly into the new padding space */
+        color: #4A90E2; 
+        margin-top: -3rem !important;
         margin-bottom: 2rem;
         padding-top: 0 !important;
         text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
@@ -247,29 +236,14 @@ st.markdown("""
     .sub-header { 
         font-size: 1.5rem; 
         font-weight: bold; 
-        color: #5D9CEC; /* Lighter Blue */
+        color: #5D9CEC; 
         margin-top: 1.5rem; 
         margin-bottom: 1rem; 
     }
     
-    .movie-card { 
-        background-color: #f8f9fa; /* Very light grey/white */
-        padding: 1.5rem; 
-        border-radius: 10px; 
-        margin-bottom: 1rem; 
-        border-left: 5px solid #4A90E2; /* Blue Border */
-        transition: transform 0.2s;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    
-    .movie-card:hover {
-        transform: translateX(5px);
-    }
-    
-    /* Button Styling - Blue Theme */
     .stButton>button {
         width: 100%;
-        background-color: #4A90E2; /* Blue */
+        background-color: #4A90E2; 
         color: white;
         font-weight: bold;
         border-radius: 8px;
@@ -279,24 +253,21 @@ st.markdown("""
     }
     
     .stButton>button:hover {
-        background-color: #357ABD; /* Darker Blue on hover */
+        background-color: #357ABD; 
         transform: translateY(-2px);
         box-shadow: 0 4px 8px rgba(74, 144, 226, 0.3);
         color: white;
     }
 
-    /* Secondary/Ghost Buttons (like Delete/Clear) */
     div[data-testid="column"] button[kind="secondary"] {
         background-color: transparent;
         border: 1px solid #4A90E2;
         color: #4A90E2;
     }
     
-    /* Hide Streamlit branding */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* Improve divider */
     hr {
         margin: 1rem 0;
         border: none;
@@ -343,8 +314,7 @@ with st.sidebar:
     
     st.markdown("### 💡 Tips")
     st.caption("""
-    - Rate at least 5 movies for better results
-    - Mix different genres
+    - Rate many movies for better results
     - Be honest with your ratings!
     """)
     
@@ -353,7 +323,7 @@ with st.sidebar:
         st.caption("⚠️ Posters disabled. Add OMDb API key in Streamlit secrets.")
 
 # ==========================================
-# 10. MAIN CONTENT - RECOMMENDATIONS
+# 10. MAIN CONTENT
 # ==========================================
 
 # Initialize session state
@@ -367,50 +337,44 @@ with col1:
     st.markdown('<div class="sub-header">Rate Movies</div>', unsafe_allow_html=True)
     st.caption("Search and rate movies to teach the AI.")
     
-    # Movie search
-    search_movie = st.text_input(
-        "Search for a movie", 
-        placeholder="e.g., The Matrix, Harry Potter...",
+    # ---------------------------------------------
+    # SINGLE DROPDOWN SEARCH
+    # ---------------------------------------------
+    
+    selected_movie_title = st.selectbox(
+        "Search for a movie",
+        options=movies_df['title'].values,
+        index=None,
+        placeholder="Type to search movie title...",
         label_visibility="collapsed"
     )
-    
-    if search_movie:
-        matches = movies_df[
-            movies_df['title'].str.contains(search_movie, case=False, na=False)
-        ].head(15)
+
+    if selected_movie_title:
+        # Find the ID for the selected title
+        movie_id = movies_df[movies_df['title'] == selected_movie_title]['movieId'].iloc[0]
         
-        if not matches.empty:
-            movie_to_rate = st.selectbox(
-                "Select Movie",
-                options=matches['movieId'].tolist(),
-                format_func=lambda x: matches[matches['movieId']==x]['title'].iloc[0],
-                label_visibility="collapsed"
-            )
-            
-            col_rating, col_add = st.columns([2, 1])
-            
-            with col_rating:
-                rating = st.slider("Rating", 0.5, 5.0, 3.0, 0.5, label_visibility="collapsed")
-            
-            with col_add:
-                if st.button("➕ Add", use_container_width=True):
-                    movie_title = matches[matches['movieId']==movie_to_rate]['title'].iloc[0]
-                    if movie_to_rate not in [m[0] for m in st.session_state.rated_movies]:
-                        st.session_state.rated_movies.append((movie_to_rate, rating, movie_title))
-                        st.success("✅ Added!")
-                        st.rerun()
-                    else:
-                        st.warning("Already rated!")
-        else:
-            st.info("No movies found.")
+        col_rating, col_add = st.columns([2, 1])
+        
+        with col_rating:
+            rating = st.slider("Rating", 0.5, 5.0, 3.0, 0.5, label_visibility="collapsed")
+        
+        with col_add:
+            if st.button("➕ Add", use_container_width=True):
+                if movie_id not in [m[0] for m in st.session_state.rated_movies]:
+                    st.session_state.rated_movies.append((movie_id, rating, selected_movie_title))
+                    st.success("✅ Added!")
+                    st.rerun()
+                else:
+                    st.warning("Already rated!")
+    else:
+        st.info("Start typing above to find a movie 👆")
     
     st.markdown("<div style='margin-bottom: 20px'></div>", unsafe_allow_html=True)
     
     # ==========================================
-    # ACTION BUTTONS (MOVED UP)
+    # ACTION BUTTONS
     # ==========================================
     
-    # Logic Settings (Hardcoded as requested)
     n_recs = 10
     iterations = 20
     
@@ -438,7 +402,7 @@ with col1:
             st.rerun()
             
     # ==========================================
-    # RATED MOVIES LIST (MOVED DOWN)
+    # RATED MOVIES LIST
     # ==========================================
     
     if st.session_state.rated_movies:
@@ -455,14 +419,6 @@ with col1:
                 if st.button("✕", key=f"del_{i}", help="Remove"):
                     st.session_state.rated_movies.pop(i)
                     st.rerun()
-                    
-    elif not search_movie:
-        # Show suggestions if nothing rated and not searching
-        st.markdown("---")
-        with st.expander("💡 Popular movies to start with"):
-            suggestions = movies_df.head(10)['title'].tolist()
-            for movie in suggestions:
-                st.caption(f"• {movie}")
 
 # RIGHT COLUMN - Show Recommendations
 with col2:
@@ -508,7 +464,7 @@ with col2:
                         font-size: 0.9rem;
                         margin-right: 0.5rem;
                     ">#{idx}</span>
-                    <span style="color: #2C3E50; font-weight: bold; font-size: 1.3rem;">
+                    <span style="color: #4A90E2; font-weight: 800; font-size: 1.4rem;">
                         {rec['title']}
                     </span>
                 </div>
@@ -520,19 +476,7 @@ with col2:
                 </p>
                 """, unsafe_allow_html=True)
                 
-                # Dynamic score color (Green to Blue)
-                score_color = "#2ECC71" if rec['score'] > 0.8 else "#3498DB"
-                
-                st.markdown(f"""
-                <p style="margin: 0.5rem 0;">
-                    <span style="color: {score_color}; font-weight: bold;">
-                        📊 Match Score: {rec['score']:.2%}
-                    </span>
-                </p>
-                """, unsafe_allow_html=True)
-                
-                if st.button("➕ Add to Watchlist", key=f"watch_{idx}", use_container_width=True):
-                    st.success(f"Added to watchlist!")
+                # REMOVED MATCH SCORE PERCENTAGE HERE
             
             st.divider()
     else:
