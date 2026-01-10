@@ -86,14 +86,23 @@ class MovieRecommender:
         
         # Helper function to extract dict from numpy array
         def extract_dict(data):
+            """Extract dictionary from various numpy storage formats"""
             if isinstance(data, dict):
                 return data
             elif isinstance(data, np.ndarray):
-                if data.shape == ():
-                    # Scalar array containing dict
-                    return data.item()
+                if data.dtype == object:
+                    # Object array - try to get the dict
+                    if data.shape == ():
+                        # 0-d array, use item()
+                        return data.item()
+                    elif data.size == 1:
+                        # Single element array
+                        return data.flat[0]
+                    else:
+                        # Shouldn't happen for dict storage
+                        raise ValueError(f"Unexpected array shape for dict: {data.shape}")
                 else:
-                    # Regular array - shouldn't happen for dicts
+                    # Not an object array
                     return data
             else:
                 return data
@@ -101,19 +110,32 @@ class MovieRecommender:
         # First try to find movie_id -> idx mapping
         for key in movie_map_keys:
             if key in model_data.files:
-                self.movie_id_map = extract_dict(model_data[key])
-                self.idx_to_movie_id = {v: k for k, v in self.movie_id_map.items()}
-                print(f"✓ Loaded movie_id -> idx map from key: '{key}'")
-                break
+                try:
+                    self.movie_id_map = extract_dict(model_data[key])
+                    if isinstance(self.movie_id_map, dict):
+                        self.idx_to_movie_id = {v: k for k, v in self.movie_id_map.items()}
+                        print(f"✓ Loaded movie_id -> idx map from key: '{key}'")
+                        break
+                except Exception as e:
+                    print(f"⚠ Failed to load from '{key}': {e}")
+                    continue
         
         # If not found, try idx -> movie_id mapping (reverse it)
         if self.movie_id_map is None:
             for key in idx_to_movie_keys:
                 if key in model_data.files:
-                    self.idx_to_movie_id = extract_dict(model_data[key])
-                    self.movie_id_map = {v: k for k, v in self.idx_to_movie_id.items()}
-                    print(f"✓ Loaded idx -> movie_id map from key: '{key}' (reversed)")
-                    break
+                    try:
+                        self.idx_to_movie_id = extract_dict(model_data[key])
+                        if isinstance(self.idx_to_movie_id, dict):
+                            self.movie_id_map = {v: k for k, v in self.idx_to_movie_id.items()}
+                            print(f"✓ Loaded idx -> movie_id map from key: '{key}' (reversed)")
+                            break
+                        else:
+                            print(f"⚠ Data from '{key}' is not a dict, got: {type(self.idx_to_movie_id)}")
+                            self.idx_to_movie_id = None
+                    except Exception as e:
+                        print(f"⚠ Failed to load from '{key}': {e}")
+                        continue
         
         if self.movie_id_map is None:
             print("⚠ No movie ID map found, creating from dataframe...")
