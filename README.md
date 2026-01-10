@@ -17,9 +17,9 @@ The project demonstrates the transition from a naive Python implementation to a 
 ### 1. Core Notebooks
 | File Name | Description |
 | :--- | :--- |
-| **`unoptimized_Recommender_System_32M.ipynb`** | **The Baseline (Unoptimized).** Contains the original, pure Python implementation of Alternating Least Squares (ALS). Useful for understanding the algorithmic logic before optimization. Includes baseline RMSE analysis. |
-| **`optimized_numba_Recommender_System_32M.ipynb`** | **The Optimized Solution.** Contains the high-performance **Numba** implementation. Features JIT-compiled kernels, parallelized loops, and custom Sparse Matrix structures (CSR/CSC). This code runs ~100x faster than the baseline. |
-| **`Final_Submission_Recommender_System.ipynb`** | **The Hybrid Model.** (Or section within the optimized notebook). Implements the "Genre-Augmented" factorization where item embeddings are regularized towards their genre centroids to fix "wormhole" artifacts in cold-start scenarios. |
+| **`unoptimized_Recommender_System_32M.ipynb`** | **The Baseline (Unoptimized).** Contains the original, pure Python implementation of  Bias only Model and Alternating Least Squares (ALS) Model. Useful for understanding the algorithmic logic before optimization. Includes baseline RMSE analysis. |
+| **`optimized_numba_Recommender_System_32M.ipynb`** | **The Optimized Solution for ALS.** Contains the high-performance **Numba** implementation. Features JIT-compiled kernels, parallelized loops, and custom Sparse Matrix structures (CSR/CSC). This code runs ~100x faster than the baseline. |
+| **`Final_Submission_Recommender_System.ipynb`** | **The Full Models.** . Implements all the Models and contains te full code |
 
 ### 2. Application & Deployment
 | File Name | Description |
