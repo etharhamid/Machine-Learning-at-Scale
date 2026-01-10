@@ -87,7 +87,12 @@ class MovieRecommender:
         # First try to find movie_id -> idx mapping
         for key in movie_map_keys:
             if key in model_data.files:
-                self.movie_id_map = model_data[key].item()
+                data = model_data[key]
+                # Handle both scalar (needs .item()) and direct dict
+                if isinstance(data, np.ndarray) and data.shape == ():
+                    self.movie_id_map = data.item()
+                else:
+                    self.movie_id_map = data
                 self.idx_to_movie_id = {v: k for k, v in self.movie_id_map.items()}
                 print(f"✓ Loaded movie_id -> idx map from key: '{key}'")
                 break
@@ -96,7 +101,12 @@ class MovieRecommender:
         if self.movie_id_map is None:
             for key in idx_to_movie_keys:
                 if key in model_data.files:
-                    self.idx_to_movie_id = model_data[key].item()
+                    data = model_data[key]
+                    # Handle both scalar (needs .item()) and direct dict
+                    if isinstance(data, np.ndarray) and data.shape == ():
+                        self.idx_to_movie_id = data.item()
+                    else:
+                        self.idx_to_movie_id = data
                     self.movie_id_map = {v: k for k, v in self.idx_to_movie_id.items()}
                     print(f"✓ Loaded idx -> movie_id map from key: '{key}' (reversed)")
                     break
