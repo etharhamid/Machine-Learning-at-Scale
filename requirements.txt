@@ -9,3 +9,4 @@ gdown>=4.7.0
 numba
 matplotlib
 seaborn
+requests
