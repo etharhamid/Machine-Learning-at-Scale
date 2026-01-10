@@ -288,7 +288,7 @@ with col1:
         
         st.markdown("---")
         n_recs = st.slider("Number of Recommendations", 5, 20, 10)
-        iterations = st.slider("Training Iterations", 5, 20, 10)
+        iterations = st.slider("Training Iterations", 5, 30, 20)
         
         if st.button("🎬 Get Recommendations", type="primary", use_container_width=True):
             with st.spinner("Training dummy user and generating recommendations..."):
