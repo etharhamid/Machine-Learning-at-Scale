@@ -14,44 +14,120 @@ class MovieRecommender:
         """
         self.movies_df = movies_df
         
-        # Load model
-        model_data = np.load(model_path)
+        # Load model with allow_pickle for dict objects
+        try:
+            model_data = np.load(model_path, allow_pickle=True)
+        except Exception as e:
+            raise ValueError(f"Failed to load model file: {e}")
         
-        # Movie embeddings and biases (V and b_m in your code)
-        self.movie_factors = model_data['movie_factors']  # Shape: (k, n_movies)
-        self.movie_biases = model_data['movie_biases']    # Shape: (n_movies,)
+        print("📦 Available keys in model:", list(model_data.files))
         
-        # Check if we need to transpose
+        # Try different possible key names for movie factors
+        movie_factor_keys = ['movie_factors', 'V', 'movie_embeddings', 'Q', 'item_factors', 'movie_matrix']
+        self.movie_factors = None
+        for key in movie_factor_keys:
+            if key in model_data.files:
+                self.movie_factors = model_data[key]
+                print(f"✓ Loaded movie factors from key: '{key}'")
+                break
+        
+        if self.movie_factors is None:
+            raise ValueError(f"Could not find movie factors. Available keys: {model_data.files}")
+        
+        # Try different possible key names for movie biases
+        movie_bias_keys = ['movie_biases', 'b_m', 'b_i', 'bm', 'bi', 'movie_bias', 'item_biases']
+        self.movie_biases = None
+        for key in movie_bias_keys:
+            if key in model_data.files:
+                self.movie_biases = model_data[key]
+                print(f"✓ Loaded movie biases from key: '{key}'")
+                break
+        
+        if self.movie_biases is None:
+            raise ValueError(f"Could not find movie biases. Available keys: {model_data.files}")
+        
+        # Check if we need to transpose movie_factors
         if self.movie_factors.shape[0] > self.movie_factors.shape[1]:
             # If shape is (n_movies, k), transpose to (k, n_movies)
+            print(f"  Transposing movie_factors from {self.movie_factors.shape} to {self.movie_factors.T.shape}")
             self.movie_factors = self.movie_factors.T
         
         self.k = self.movie_factors.shape[0]
         self.n_movies = self.movie_factors.shape[1]
         
-        # Hyperparameters (same as your notebook)
-        self.lamda = model_data.get('lamda', 0.05)
-        self.gamma_u = model_data.get('gamma_u', 0.05)
-        self.gamma_b = model_data.get('gamma_b', 0.05)
+        # Hyperparameters (try to load from model, otherwise use defaults)
+        self.lamda = 0.05
+        self.gamma_u = 0.05
+        self.gamma_b = 0.05
+        
+        # Try to load lambda
+        if 'lamda' in model_data.files:
+            self.lamda = float(model_data['lamda'])
+        elif 'lambda' in model_data.files:
+            self.lamda = float(model_data['lambda'])
+        
+        # Try to load gamma_u
+        if 'gamma_u' in model_data.files:
+            self.gamma_u = float(model_data['gamma_u'])
+        elif 'gamma_v' in model_data.files:
+            # gamma_v is likely the same as gamma_u in your model
+            self.gamma_u = float(model_data['gamma_v'])
+        
+        # Try to load gamma_b
+        if 'gamma_b' in model_data.files:
+            self.gamma_b = float(model_data['gamma_b'])
         
         # Load movie ID mapping
-        if 'movie_id_map' in model_data.files:
-            self.movie_id_map = model_data['movie_id_map'].item()
-            self.idx_to_movie_id = {v: k for k, v in self.movie_id_map.items()}
-        else:
+        movie_map_keys = ['movie_id_map', 'movieid_to_idx', 'movie_map', 'item_map']
+        idx_to_movie_keys = ['idx_to_movieid', 'idx_to_movie_id', 'movie_idx_map']
+        
+        self.movie_id_map = None
+        self.idx_to_movie_id = None
+        
+        # First try to find movie_id -> idx mapping
+        for key in movie_map_keys:
+            if key in model_data.files:
+                self.movie_id_map = model_data[key].item()
+                self.idx_to_movie_id = {v: k for k, v in self.movie_id_map.items()}
+                print(f"✓ Loaded movie_id -> idx map from key: '{key}'")
+                break
+        
+        # If not found, try idx -> movie_id mapping (reverse it)
+        if self.movie_id_map is None:
+            for key in idx_to_movie_keys:
+                if key in model_data.files:
+                    self.idx_to_movie_id = model_data[key].item()
+                    self.movie_id_map = {v: k for k, v in self.idx_to_movie_id.items()}
+                    print(f"✓ Loaded idx -> movie_id map from key: '{key}' (reversed)")
+                    break
+        
+        if self.movie_id_map is None:
+            print("⚠ No movie ID map found, creating from dataframe...")
             # Create mapping from dataframe
             self.movie_id_map = {row['movieId']: idx 
                                 for idx, row in movies_df.iterrows()}
             self.idx_to_movie_id = {v: k for k, v in self.movie_id_map.items()}
         
         # Load movie rating counts if available (for filtering)
-        if 'movie_counts' in model_data.files:
-            self.movie_counts = model_data['movie_counts']
-        else:
+        count_keys = ['movie_counts', 'movie_ptr', 'counts', 'n_ratings']
+        self.movie_counts = None
+        for key in count_keys:
+            if key in model_data.files:
+                data = model_data[key]
+                if key == 'movie_ptr':
+                    # If it's a pointer array, calculate counts
+                    self.movie_counts = np.diff(data)
+                else:
+                    self.movie_counts = data
+                print(f"✓ Loaded movie counts from key: '{key}'")
+                break
+        
+        if self.movie_counts is None:
+            print("⚠ No movie counts found, disabling filtering")
             # Default to no filtering
             self.movie_counts = np.ones(self.n_movies) * 1000
         
-        print(f"✓ Recommender initialized:")
+        print(f"\n✓ Recommender initialized:")
         print(f"  - Movies: {self.n_movies:,}")
         print(f"  - Latent dimensions: {self.k}")
         print(f"  - Hyperparameters: λ={self.lamda}, γ_u={self.gamma_u}, γ_b={self.gamma_b}")
@@ -274,3 +350,30 @@ class MovieRecommender:
         
         return popular_movies
 
+
+# ============================================
+# TESTING SCRIPT (Run in Colab to verify)
+# ============================================
+"""
+# Test in your Colab notebook:
+
+from recommender import MovieRecommender
+import pandas as pd
+
+# Load movies
+movies_df = pd.read_csv('movies.csv')
+
+# Initialize recommender
+recommender = MovieRecommender('best_model.npz', movies_df)
+
+# Test with same movie as your notebook
+dummy_ratings = [(4896, 5.0)]  # Harry Potter
+
+# Get recommendations
+recommendations = recommender.recommend_from_ratings(dummy_ratings, n_recommendations=15)
+
+# Display
+print("\\nRecommendations:")
+for i, rec in enumerate(recommendations, 1):
+    print(f"{i}. {rec['title']} (Score: {rec['score']:.4f})")
+"""
