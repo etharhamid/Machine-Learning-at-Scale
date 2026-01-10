@@ -1,28 +1,38 @@
-# Machine Learning at Scale: Recommender Systems
+# Machine Learning at Scale: MovieLens 32M Recommender System
 
-![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
-![Dataset](https://img.shields.io/badge/dataset-MovieLens%2032M-orange)
-![Status](https://img.shields.io/badge/status-active-brightgreen)
+This repository contains the implementation of a high-performance **Matrix Factorization** recommender system scaled to the **MovieLens 32M** dataset (32 million ratings, 200k users, 84k movies).
 
-## 📖 Overview
+The project demonstrates the transition from a naive Python implementation to a highly optimized, JIT-compiled solution using **Numba**, achieving a **~100x speedup**. It also introduces a **Genre-Augmented ALS** model to solve cold-start problems by regularizing embeddings towards semantic priors.
 
-This repository demonstrates the implementation and optimization of Recommender Systems designed to handle large-scale datasets. Specifically, it tackles the challenge of processing the **MovieLens 32M** dataset (32 million ratings, 87,000+ movies).
+---
 
-The project progresses from standard exploratory data analysis and dimensionality reduction to building a highly optimized, vectorized recommender engine capable of efficient similarity calculations using **Numba** and **JIT compilation**.
+## 🔗 Live Demo
+**Interactive Web Application:** [👉 Click here to try the Streamlit App](https://machine-learning-at-scale-bvceyhyya6dhafws5dwwdx.streamlit.app/)  
+*Experience real-time movie recommendations powered by the Numba-optimized backend.*
 
-## 🚀 Key Features
-
-- **Scalable Data Processing**: Efficient handling of 32 million interaction records using optimized data structures.
-- **Dimensionality Reduction**: Implementation of **PCA (Principal Component Analysis)** to reduce feature space and visualize movie genre clusters.
-- **High-Performance Computing**: utilization of **Numba** to JIT-compile critical similarity calculation paths, achieving performance significantly faster than standard Python/Pandas loops.
-- **Item-Based Collaborative Filtering**: A custom implementation of item-item similarity for generating personalized movie recommendations.
+---
 
 ## 📂 Repository Structure
 
-* `Recommender_System_32M.ipynb`: The baseline (naïve) Python implementation. Useful for understanding the core algorithm without optimization complexity.
-* `numba_Recommender_System_32M.ipynb`: The **production** code. Contains the Numba-optimized ALS kernels, custom Sparse Matrix classes (CSR/CSC), and the full training pipeline.
-* `random_search_results.csv`: The complete log of the 50-trial hyperparameter search.
+### 1. Core Notebooks
+| File Name | Description |
+| :--- | :--- |
+| **`unoptimized_Recommender_System_32M.ipynb`** | **The Baseline (Unoptimized).** Contains the original, pure Python implementation of Alternating Least Squares (ALS). Useful for understanding the algorithmic logic before optimization. Includes baseline RMSE analysis. |
+| **`optimized_numba_Recommender_System_32M.ipynb`** | **The Optimized Solution.** Contains the high-performance **Numba** implementation. Features JIT-compiled kernels, parallelized loops, and custom Sparse Matrix structures (CSR/CSC). This code runs ~100x faster than the baseline. |
+| **`Final_Submission_Recommender_System.ipynb`** | **The Hybrid Model.** (Or section within the optimized notebook). Implements the "Genre-Augmented" factorization where item embeddings are regularized towards their genre centroids to fix "wormhole" artifacts in cold-start scenarios. |
 
+### 2. Application & Deployment
+| File Name | Description |
+| :--- | :--- |
+| `app.py` | The source code for the Streamlit web application. Contains the inference-only Numba kernels for real-time scoring. |
+| `requirements.txt` | List of Python dependencies (Numba, NumPy, Pandas, Streamlit, SciPy). |
+
+### 3. Model Artifacts (Saved Weights)
+* `movie_embeddings.npy` / `movie_biases.npy`: Pre-trained latent factors ($k=20$) used by the web app.
+* `movie_counts.npy`: Used for popularity filtering in the demo.
+* `movie_map.pkl`: Dictionary mapping raw MovieLens IDs to internal matrix indices.
+
+---
 ## 📊 Dataset
 
 This project utilizes the **MovieLens 32M** dataset, distinct for its size and complexity:
@@ -39,14 +49,45 @@ This project utilizes the **MovieLens 32M** dataset, distinct for its size and c
 - **Machine Learning**: Scikit-Learn (PCA, Preprocessing)
 - **Optimization**: Numba (Just-In-Time compilation)
 - **Visualization**: Matplotlib, Seaborn
+  
+## 🚀 Key Features & Optimizations
 
-## 💻 Usage
+### 1. Computational Scalability (Numba)
+* **Challenge:** The naive Python implementation took **~4.5 hours** per 15 iterations due to the Global Interpreter Lock (GIL) and loop overhead.
+* **Solution:** We implemented custom ALS kernels using `@njit(parallel=True, fastmath=True)`.
+* **Result:** Training time dropped to **2-3 minutes**, enabling a 50-trial hyperparameter search that improved Test RMSE to **0.7704**.
 
-1.  **Install Dependencies:**
+### 2. Algorithmic Innovation (Genre Augmentation)
+* **Challenge:** Standard MF maps unrated (cold-start) items to the zero vector ($\mathbf{0}$), causing unrelated obscure movies to cluster together.
+* **Solution:** We modified the loss function to regularize item vectors towards a **Genre Prior** (centroid of their genre tags) instead of zero.
+* **Result:** Unrated "Horror" movies now cluster with other Horror movies automatically, solving the semantic consistency problem.
+
+### 3. Latent Space Analysis
+* **Polarization:** identified "High-Norm" movies (e.g., *Star Wars*, *Pulp Fiction*) as polarizing content.
+* **Semantic Clustering:** PCA visualizations confirm that the model implicitly learned to group franchises (*Harry Potter*, *Saw*) and genres without explicit supervision.
+
+---
+
+## 💻 Installation & Usage
+
+### Prerequisites
+* Python 3.8+
+* The **MovieLens 32M Dataset** (`ratings.csv`, `movies.csv`) must be downloaded from [GroupLens](https://grouplens.org/datasets/movielens/32m/) and placed in the root directory.
+
+### Setup
+1.  Clone the repository:
     ```bash
+    git clone [https://github.com/etharhamid/Machine-Learning-at-Scale.git](https://github.com/etharhamid/Machine-Learning-at-Scale.git)
+    cd Machine-Learning-at-Scale
+    ```
+2.  Install dependencies:
+    ```bash
+    pip install -r requirements.txt
     pip install numpy pandas matplotlib seaborn numba
     ```
-2.  **Download Data:**
-    Place the `ratings.csv` and `movies.csv` from the MovieLens 32M dataset in the root directory.
-3.  **Run the Notebook:**
-    Open `numba_Recommender_System_32M.ipynb` and execute the cells. The script handles data loading, sparse matrix construction, training, and visualization automatically.
+
+### Running the Web App Locally
+To launch the interactive dashboard on your local machine:
+```bash
+streamlit run app.py
+
