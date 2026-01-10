@@ -9,43 +9,20 @@ import gdown
 # ==========================================
 # 1. PATH & IMPORT SETUP
 # ==========================================
-# Get the absolute path of the directory where app.py is located
 BASE_DIR = Path(__file__).parent
 SRC_DIR = BASE_DIR / 'src'
 MODEL_PATH = BASE_DIR / 'best_model.npz'
-
-# For GitHub raw content, use this format:
-# DATA_PATH = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO_NAME/main/data/movies.csv"
-# Or for local file:
 DATA_PATH = BASE_DIR / 'data' / 'movies.csv'
 LINKS_PATH = BASE_DIR / 'data' / 'links.csv'
 
-# Add src to system path so we can import modules
 if str(SRC_DIR) not in sys.path:
     sys.path.append(str(SRC_DIR))
 
-# Import modules with error handling
 try:
     from recommender import MovieRecommender
-    from utils import (
-        load_movies_data,
-        create_rating_distribution_plot,
-        create_similarity_plot,
-        create_polarization_plot,
-        format_genres
-    )
+    from utils import load_movies_data, format_genres
 except ImportError as e:
-    st.error(f"""
-    ❌ Import Error: {e}
-    
-    Please ensure your folder structure is:
-    - app.py
-    - src/
-        - recommender.py
-        - utils.py
-    - data/
-        - movies.csv
-    """)
+    st.error(f"❌ Import Error: {e}")
     st.stop()
 
 # ==========================================
@@ -55,379 +32,331 @@ st.set_page_config(
     page_title="Movie Recommender System",
     page_icon="🎬",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# Google Drive File IDs
-# Get the ID from the share link: https://drive.google.com/file/d/FILE_ID_HERE/view?usp=sharing
-MODEL_FILE_ID = '1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq'  # Your model file
-MOVIES_FILE_ID = '1f7ImoZRL4C9x_ZzSG4qhTCunV2lVvpD8'  # Replace with your movies.csv file ID
-LINKS_FILE_ID = '1lxpfo64t39kppq2F4VKqFy5saxp-a4vC'  # Replace with your links.csv file ID from Google Drive 
+MODEL_FILE_ID = '1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq'
+MOVIES_FILE_ID = '1f7ImoZRL4C9x_ZzSG4qhTCunV2lVvpD8'
+LINKS_FILE_ID = '1uVWSBWCtCe7YrekhshK_CjK_v_w-Bdkj'
 
 # ==========================================
-# 3. DATA LOADING & CACHING
+# 3. DATA LOADING
 # ==========================================
 @st.cache_resource
 def load_data_and_model():
-    """
-    Downloads model and movies.csv from Google Drive if missing, then loads them.
-    Cached so it only runs once.
-    """
-    # 1. Download Model if it doesn't exist
+    # Download model
     if not os.path.exists(MODEL_PATH):
-        # Create directory if needed
         os.makedirs(MODEL_PATH.parent, exist_ok=True)
-        
         url = f'https://drive.google.com/uc?id={MODEL_FILE_ID}'
         try:
-            with st.spinner("📥 Downloading model from Google Drive (100MB+)..."):
+            with st.spinner("📥 Downloading model..."):
                 gdown.download(url, str(MODEL_PATH), quiet=False)
         except Exception as e:
             st.error(f"❌ Failed to download model: {e}")
-            st.info("💡 Make sure the Google Drive link has 'Anyone with the link' sharing enabled")
             st.stop()
     
-    # Verify model file exists and is not empty
-    if not os.path.exists(MODEL_PATH):
-        st.error(f"❌ Model file not found after download: {MODEL_PATH}")
-        st.stop()
-    
-    file_size = os.path.getsize(MODEL_PATH)
-    if file_size == 0:
-        st.error(f"❌ Model file is empty (0 bytes)")
-        os.remove(MODEL_PATH)
-        st.info("Deleted empty file. Please restart the app.")
-        st.stop()
-
-    # 2. Download Movies CSV if it doesn't exist
+    # Download movies
     if not os.path.exists(DATA_PATH):
-        # Create data directory if it doesn't exist
         os.makedirs(DATA_PATH.parent, exist_ok=True)
-        
         url = f'https://drive.google.com/uc?id={MOVIES_FILE_ID}'
         try:
-            with st.spinner("📥 Downloading movies.csv from Google Drive..."):
+            with st.spinner("📥 Downloading movies data..."):
                 gdown.download(url, str(DATA_PATH), quiet=False)
         except Exception as e:
-            st.error(f"❌ Failed to download movies.csv: {e}")
-            st.info("💡 Make sure the Google Drive link has 'Anyone with the link' sharing enabled")
+            st.error(f"❌ Failed to download movies: {e}")
             st.stop()
-
-    # 3. Download Links CSV if it doesn't exist (for movie posters)
+    
+    # Download links
     if not os.path.exists(LINKS_PATH):
-        # Create data directory if it doesn't exist
-        os.makedirs(LINKS_PATH.parent, exist_ok=True)
-        
         url = f'https://drive.google.com/uc?id={LINKS_FILE_ID}'
         try:
-            with st.spinner("📥 Downloading links.csv from Google Drive..."):
+            with st.spinner("📥 Downloading links data..."):
                 gdown.download(url, str(LINKS_PATH), quiet=False)
-        except Exception as e:
-            # Links are optional - if download fails, continue without posters
-            st.warning(f"⚠️ Could not download links.csv: {e}")
-            st.info("💡 App will continue without movie posters")
-
-    # 4. Load Movies Data
-    try:
-        # Check file size first
-        file_size = os.path.getsize(DATA_PATH)
-        if file_size == 0:
-            st.error(f"❌ Movies data file is empty: {DATA_PATH}")
-            # Delete empty file so it re-downloads next time
-            os.remove(DATA_PATH)
-            st.info("Please restart the app to re-download the file")
-            st.stop()
-        
-        movies_df = load_movies_data(str(DATA_PATH))
-        
-        if movies_df.empty or len(movies_df.columns) == 0:
-            st.error("❌ Movies data file is empty or invalid!")
-            os.remove(DATA_PATH)
-            st.info("Please restart the app to re-download the file")
-            st.stop()
-        
-        # 5. Load Links Data (for IMDb posters)
-        links_df = None
-        if os.path.exists(LINKS_PATH):
-            try:
-                links_df = pd.read_csv(LINKS_PATH)
-                # Merge links with movies
-                movies_df = movies_df.merge(links_df, on='movieId', how='left')
-            except Exception as e:
-                # Continue without links if there's an error
-                pass
-            
-    except pd.errors.EmptyDataError:
-        st.error(f"❌ Movies data file is empty: {DATA_PATH}")
-        if os.path.exists(DATA_PATH):
-            os.remove(DATA_PATH)
-        st.info("Please restart the app to re-download the file")
-        st.stop()
-    except Exception as e:
-        st.error(f"❌ Failed to load movies data: {e}")
-        st.stop()
-
-    # 6. Initialize Recommender
-    try:
-        recommender = MovieRecommender(str(MODEL_PATH), movies_df)
-        return recommender, movies_df
-    except KeyError as e:
-        st.error(f"❌ Model key error: {e}")
-        st.info("The model file is missing expected keys.")
-        # Show what keys are available
+        except:
+            pass
+    
+    # Load data
+    movies_df = load_movies_data(str(DATA_PATH))
+    
+    if os.path.exists(LINKS_PATH):
         try:
-            import numpy as np
-            test_data = np.load(MODEL_PATH, allow_pickle=True)
-            st.info(f"📦 Available keys in model: {list(test_data.files)}")
-            st.info("Expected keys: 'movie_embeddings', 'movie_biases', 'idx_to_movieid'")
-        except Exception as inner_e:
-            st.error(f"Could not read model file: {inner_e}")
-        st.stop()
-    except Exception as e:
-        st.error(f"❌ Error initializing recommender: {e}")
-        st.info("💡 Tip: Check that your model file has the correct structure.")
-        import traceback
-        with st.expander("Show full error traceback"):
-            st.code(traceback.format_exc())
-        st.stop()
+            links_df = pd.read_csv(LINKS_PATH)
+            movies_df = movies_df.merge(links_df, on='movieId', how='left')
+        except:
+            pass
+    
+    recommender = MovieRecommender(str(MODEL_PATH), movies_df)
+    return recommender, movies_df
 
-# Load the resources (silently)
 recommender, movies_df = load_data_and_model()
 
 # ==========================================
-# HELPER FUNCTIONS
+# 4. HELPER FUNCTIONS
 # ==========================================
-def get_poster_url(tmdb_id, size='w500'):
-    """
-    Get movie poster URL from TMDb
-    
-    Args:
-        tmdb_id: TMDb movie ID from links.csv
-        size: Poster size (w92, w154, w185, w342, w500, w780, original)
-    
-    Returns:
-        URL to poster image or None
-    """
-    if pd.isna(tmdb_id):
+def get_tmdb_poster(imdb_id, size='w342'):
+    """Get poster URL from TMDb using IMDb ID"""
+    if pd.isna(imdb_id):
         return None
-    
     try:
-        tmdb_id = int(tmdb_id)
-        return f"https://image.tmdb.org/t/p/{size}/{tmdb_id}.jpg"
+        # Format IMDb ID (must be tt followed by 7 digits)
+        imdb_id = str(int(imdb_id))
+        imdb_id = f"tt{imdb_id.zfill(7)}"
+        
+        # Use TMDb API (no key needed for images)
+        # This is a simplified approach - ideally use TMDb API with proper ID conversion
+        return f"https://img.omdbapi.com/?i={imdb_id}&apikey=3e8f8b3e"
     except:
         return None
 
 # ==========================================
-# 4. CUSTOM CSS
+# 5. CUSTOM CSS
 # ==========================================
 st.markdown("""
 <style>
-    .main-header { 
-        font-size: 3rem; 
-        font-weight: bold; 
-        text-align: center; 
-        color: #FF6B6B; 
-        margin-bottom: 2rem; 
+    /* Main styles */
+    .main-header {
+        font-size: 3.5rem;
+        font-weight: 900;
+        text-align: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem;
+        padding: 1rem 0;
     }
-    .sub-header { 
-        font-size: 1.5rem; 
-        font-weight: bold; 
-        color: #4ECDC4; 
-        margin-top: 2rem; 
-        margin-bottom: 1rem; 
+    .sub-text {
+        text-align: center;
+        color: #888;
+        font-size: 1.1rem;
+        margin-bottom: 3rem;
     }
-    .movie-card { 
-        background-color: #262730; 
-        padding: 1.5rem; 
-        border-radius: 10px; 
-        margin-bottom: 1rem; 
-        border-left: 5px solid #FF6B6B; 
+    
+    /* Movie card styles */
+    .movie-card {
+        background: linear-gradient(145deg, #2a2d3a 0%, #1e2029 100%);
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border: 2px solid transparent;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
-    .metric-card { 
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-        padding: 1rem; 
-        border-radius: 10px; 
-        color: white; 
-        text-align: center; 
+    .movie-card:hover {
+        border: 2px solid #667eea;
+        box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+        transform: translateY(-2px);
     }
+    
+    /* Rating badge */
+    .rating-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: bold;
+        margin-right: 0.5rem;
+    }
+    
+    /* Poster placeholder */
+    .poster-placeholder {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        padding: 2rem 1rem;
+        text-align: center;
+        font-size: 3rem;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Rated movie item */
+    .rated-item {
+        background: #2a2d3a;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 0.8rem;
+        border-left: 4px solid #667eea;
+    }
+    
+    /* Button styles */
     .stButton>button {
         width: 100%;
-        background-color: #FF6B6B;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        font-weight: bold;
-        border-radius: 5px;
-        padding: 0.5rem 1rem;
+        font-weight: 600;
+        border-radius: 10px;
+        padding: 0.75rem 1.5rem;
         border: none;
+        transition: all 0.3s ease;
+        font-size: 1rem;
     }
     .stButton>button:hover {
-        background-color: #ff5252;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Info box */
+    .info-box {
+        background: rgba(102, 126, 234, 0.1);
+        border-left: 4px solid #667eea;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 1rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 5. APP INTERFACE
+# 6. APP INTERFACE
 # ==========================================
-st.markdown('<div class="main-header">🎬 Movie Recommender System</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🎬 Movie Recommender</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-text">Discover your next favorite movie with AI-powered recommendations</div>', unsafe_allow_html=True)
 
-# Sidebar
-with st.sidebar:
-    st.markdown("### ℹ️ Model Info")
-    st.info(f"""
-    📽️ **Movies:** {recommender.n_movies:,}  
-    📐 **Dimensions:** {recommender.k}  
-    🎯 **Type:** Dummy User Training
-    """)
-    
-    st.markdown("---")
-    st.markdown("### 💡 About")
-    st.caption("This app uses Matrix Factorization (ALS) for personalized movie recommendations.")
-
-# ==========================================
-# 6. RECOMMENDATIONS PAGE
-# ==========================================
-st.markdown('<div class="sub-header">Get Personalized Recommendations</div>', unsafe_allow_html=True)
-
-# Initialize session state for rated movies
+# Initialize session state
 if 'rated_movies' not in st.session_state:
     st.session_state.rated_movies = []
+if 'recs' not in st.session_state:
+    st.session_state.recs = []
 
-col1, col2 = st.columns([1, 2])
+# Auto-generate recommendations when ratings change
+def update_recommendations():
+    if len(st.session_state.rated_movies) > 0:
+        user_ratings = [(m_id, rating) for m_id, rating, _ in st.session_state.rated_movies]
+        st.session_state.recs = recommender.recommend_from_ratings(
+            user_ratings, 
+            n_recommendations=10,
+            iterations=20
+        )
 
-with col1:
-    st.markdown("#### 🎬 Rate Some Movies")
-    st.caption("Search and rate movies to get personalized recommendations")
+# Main layout
+col_left, col_right = st.columns([2, 3], gap="large")
+
+with col_left:
+    st.markdown("### 🎬 Rate Movies")
     
-    # Movie search
-    search_movie = st.text_input("Search for a movie", placeholder="e.g., Harry Potter...")
+    # Search box
+    search_movie = st.text_input(
+        "",
+        placeholder="🔍 Search for a movie...",
+        label_visibility="collapsed"
+    )
     
     if search_movie:
         matches = movies_df[movies_df['title'].str.contains(search_movie, case=False, na=False)].head(10)
         
         if not matches.empty:
-            movie_to_rate = st.selectbox(
-                "Select Movie",
+            selected_movie = st.selectbox(
+                "Select a movie",
                 options=matches['movieId'].tolist(),
-                format_func=lambda x: matches[matches['movieId']==x]['title'].iloc[0]
+                format_func=lambda x: matches[matches['movieId']==x]['title'].iloc[0],
+                label_visibility="collapsed"
             )
             
-            rating = st.slider("Your Rating", 0.5, 5.0, 3.0, 0.5)
-            
-            if st.button("➕ Add Rating", use_container_width=True):
-                movie_title = matches[matches['movieId']==movie_to_rate]['title'].iloc[0]
-                # Check if already rated
-                if movie_to_rate not in [m[0] for m in st.session_state.rated_movies]:
-                    st.session_state.rated_movies.append((movie_to_rate, rating, movie_title))
-                    st.success(f"Added: {movie_title}")
-                else:
-                    st.warning("Already rated this movie!")
-    
-    st.markdown("---")
-    st.markdown("#### 📝 Your Ratings")
-    
-    if st.session_state.rated_movies:
-        for i, (movie_id, rating, title) in enumerate(st.session_state.rated_movies):
-            col_a, col_b = st.columns([4, 1])
+            col_a, col_b = st.columns([3, 1])
             with col_a:
-                st.write(f"**{title}**")
-                st.caption(f"⭐ {rating}")
+                rating = st.slider("⭐ Your Rating", 0.5, 5.0, 4.0, 0.5, label_visibility="collapsed")
             with col_b:
-                if st.button("🗑️", key=f"del_{i}"):
+                if st.button("➕ Add", use_container_width=True):
+                    movie_title = matches[matches['movieId']==selected_movie]['title'].iloc[0]
+                    if selected_movie not in [m[0] for m in st.session_state.rated_movies]:
+                        st.session_state.rated_movies.append((selected_movie, rating, movie_title))
+                        update_recommendations()
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ Already rated!")
+        else:
+            st.info("No movies found. Try a different search.")
+    
+    # Show rated movies
+    if st.session_state.rated_movies:
+        st.markdown("---")
+        st.markdown("### 📝 Your Ratings")
+        
+        for i, (movie_id, rating, title) in enumerate(st.session_state.rated_movies):
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                st.markdown(f"""
+                <div class="rated-item">
+                    <strong>{title[:50]}{'...' if len(title) > 50 else ''}</strong><br>
+                    <span class="rating-badge">⭐ {rating}</span>
+                </div>
+                """, unsafe_allow_html=True)
+            with col2:
+                if st.button("🗑️", key=f"del_{i}", use_container_width=True):
                     st.session_state.rated_movies.pop(i)
+                    update_recommendations()
                     st.rerun()
         
-        st.markdown("---")
-        n_recs = st.slider("Number of Recommendations", 5, 20, 10)
-        iterations = st.slider("Training Iterations", 5, 30, 20)
-        
-        if st.button("🎬 Get Recommendations", type="primary", use_container_width=True):
-            with st.spinner("Training dummy user and generating recommendations..."):
-                try:
-                    # Convert to format expected by recommender
-                    user_ratings = [(m_id, rating) for m_id, rating, _ in st.session_state.rated_movies]
-                    
-                    recs = recommender.recommend_from_ratings(
-                        user_ratings, 
-                        n_recommendations=n_recs,
-                        iterations=iterations
-                    )
-                    
-                    st.session_state.recs = recs
-                    st.success(f"✅ Found {len(recs)} recommendations!")
-                except Exception as e:
-                    st.error(f"❌ Error: {e}")
-                    import traceback
-                    st.code(traceback.format_exc())
-        
-        if st.button("🔄 Clear All Ratings", use_container_width=True):
+        if st.button("🔄 Clear All", use_container_width=True):
             st.session_state.rated_movies = []
-            st.session_state.pop('recs', None)
+            st.session_state.recs = []
             st.rerun()
     else:
-        st.info("👆 Search and rate some movies to get started!")
+        st.markdown("""
+        <div class="info-box">
+            <strong>👋 Get Started!</strong><br>
+            Search and rate a few movies you've seen to get personalized recommendations.
+        </div>
+        """, unsafe_allow_html=True)
 
-with col2:
-    st.markdown("#### 🎥 Your Recommendations")
+with col_right:
+    st.markdown("### 🎥 Recommended for You")
     
-    if 'recs' in st.session_state and st.session_state.recs:
-        st.caption(f"Based on {len(st.session_state.rated_movies)} rated movies")
+    if st.session_state.recs:
+        st.caption(f"✨ Based on {len(st.session_state.rated_movies)} rated movie(s)")
+        st.markdown("<br>", unsafe_allow_html=True)
         
         for idx, rec in enumerate(st.session_state.recs, 1):
-            # Get movie info including tmdbId for poster
             movie_info = movies_df[movies_df['movieId'] == rec['movieId']]
             
-            # Create columns for poster and info
-            col_poster, col_info = st.columns([1, 4])
+            col_poster, col_info = st.columns([1, 3])
             
             with col_poster:
-                # Try to display poster if tmdbId exists
-                poster_displayed = False
-                if not movie_info.empty and 'tmdbId' in movie_info.columns:
-                    tmdb_id = movie_info.iloc[0]['tmdbId']
-                    if pd.notna(tmdb_id):
+                # Try to show poster
+                poster_shown = False
+                if not movie_info.empty and 'imdbId' in movie_info.columns:
+                    imdb_id = movie_info.iloc[0]['imdbId']
+                    if pd.notna(imdb_id):
                         try:
-                            # TMDb poster URL (w185 = 185px width)
-                            poster_url = f"https://image.tmdb.org/t/p/w185/{int(tmdb_id)}.jpg"
-                            st.image(poster_url, use_container_width=True)
-                            poster_displayed = True
+                            # Try OMDb poster
+                            imdb_str = f"tt{str(int(imdb_id)).zfill(7)}"
+                            poster_url = f"https://img.omdbapi.com/?i={imdb_str}&h=300&apikey=3e8f8b3e"
+                            st.image(poster_url, use_column_width=True)
+                            poster_shown = True
                         except:
                             pass
                 
-                # Show placeholder if no poster
-                if not poster_displayed:
-                    st.markdown("""
-                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                                padding: 2rem; 
-                                border-radius: 8px; 
-                                text-align: center;
-                                font-size: 3rem;">
-                        🎬
-                    </div>
-                    """, unsafe_allow_html=True)
+                if not poster_shown:
+                    st.markdown('<div class="poster-placeholder">🎬</div>', unsafe_allow_html=True)
             
             with col_info:
                 st.markdown(f"""
-                <div style="padding: 0.5rem;">
-                    <h4 style="margin:0; color:#FF6B6B;">#{idx} {rec['title']}</h4>
-                    <p style="margin:0.5rem 0; color:#999; font-size: 0.9rem;">
-                        <b>Genres:</b> {format_genres(rec['genres'])}
+                <div class="movie-card">
+                    <h3 style="margin:0; color:#667eea; font-size:1.3rem;">#{idx} {rec['title']}</h3>
+                    <p style="margin:0.5rem 0; color:#aaa; font-size:0.9rem;">
+                        {format_genres(rec['genres'])}
                     </p>
-                    <p style="margin:0; color:#4ECDC4;">
-                        📊 <b>Score:</b> {rec['score']:.4f}
-                    </p>
+                    <span class="rating-badge">📊 Score: {rec['score']:.3f}</span>
                 </div>
                 """, unsafe_allow_html=True)
             
-            st.divider()
+            if idx < len(st.session_state.recs):
+                st.markdown("<br>", unsafe_allow_html=True)
     else:
-        st.info("👈 Rate some movies and click 'Get Recommendations' to see results!")
+        st.markdown("""
+        <div class="info-box">
+            <strong>🎯 No recommendations yet</strong><br>
+            Rate some movies on the left to see personalized recommendations here.
+        </div>
+        """, unsafe_allow_html=True)
 
-# ==========================================
-# 7. FOOTER
-# ==========================================
+# Footer
 st.markdown("---")
 st.markdown("""
-<div style="text-align: center; color: #666; padding: 1rem;">
-    <p>Built with ❤️ using Streamlit | Powered by Matrix Factorization (ALS)</p>
+<div style="text-align: center; color: #666; padding: 1.5rem;">
+    <p style="margin:0;">Built with ❤️ using <strong>Streamlit</strong> • Powered by <strong>Matrix Factorization (ALS)</strong></p>
+    <p style="margin:0.5rem 0 0 0; font-size:0.9rem;">
+        {movies:,} movies • {dims} latent dimensions
+    </p>
 </div>
-""", unsafe_allow_html=True)
+""".format(movies=recommender.n_movies, dims=recommender.k), unsafe_allow_html=True)
