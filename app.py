@@ -59,8 +59,8 @@ st.set_page_config(
 
 # Google Drive File IDs
 # Get the ID from the share link: https://drive.google.com/file/d/FILE_ID_HERE/view?usp=sharing
-MODEL_FILE_ID = '1f7ImoZRL4C9x_ZzSG4qhTCunV2lVvpD8'  # Your model file
-MOVIES_FILE_ID = '1sRGLCqUlZHHIauj8dJK46nfBtGtJq12v?usp=drive_link'  # Replace with your movies.csv file ID 
+MODEL_FILE_ID = '1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq'  # Your model file
+MOVIES_FILE_ID = '1f7ImoZRL4C9x_ZzSG4qhTCunV2lVvpD8'  # Replace with your movies.csv file ID 
 
 # ==========================================
 # 3. DATA LOADING & CACHING
@@ -73,6 +73,9 @@ def load_data_and_model():
     """
     # 1. Download Model if it doesn't exist
     if not os.path.exists(MODEL_PATH):
+        # Create directory if needed
+        os.makedirs(MODEL_PATH.parent, exist_ok=True)
+        
         url = f'https://drive.google.com/uc?id={MODEL_FILE_ID}'
         try:
             with st.spinner("📥 Downloading model from Google Drive (100MB+)..."):
@@ -82,6 +85,20 @@ def load_data_and_model():
             st.error(f"❌ Failed to download model: {e}")
             st.info("💡 Make sure the Google Drive link has 'Anyone with the link' sharing enabled")
             st.stop()
+    
+    # Verify model file exists and is not empty
+    if not os.path.exists(MODEL_PATH):
+        st.error(f"❌ Model file not found after download: {MODEL_PATH}")
+        st.stop()
+    
+    file_size = os.path.getsize(MODEL_PATH)
+    if file_size == 0:
+        st.error(f"❌ Model file is empty (0 bytes)")
+        os.remove(MODEL_PATH)
+        st.info("Deleted empty file. Please restart the app.")
+        st.stop()
+    
+    st.info(f"✓ Model file found: {file_size / (1024*1024):.1f} MB")
 
     # 2. Download Movies CSV if it doesn't exist
     if not os.path.exists(DATA_PATH):
@@ -116,6 +133,8 @@ def load_data_and_model():
             os.remove(DATA_PATH)
             st.info("Please restart the app to re-download the file")
             st.stop()
+        
+        st.info(f"✓ Loaded {len(movies_df):,} movies")
             
     except pd.errors.EmptyDataError:
         st.error(f"❌ Movies data file is empty: {DATA_PATH}")
@@ -129,18 +148,28 @@ def load_data_and_model():
 
     # 4. Initialize Recommender
     try:
+        st.info("🔄 Initializing recommender system...")
         recommender = MovieRecommender(str(MODEL_PATH), movies_df)
+        st.success("✅ Recommender initialized successfully!")
         return recommender, movies_df
+    except KeyError as e:
+        st.error(f"❌ Model key error: {e}")
+        st.info("The model file is missing expected keys.")
+        # Show what keys are available
+        try:
+            import numpy as np
+            test_data = np.load(MODEL_PATH, allow_pickle=True)
+            st.info(f"📦 Available keys in model: {list(test_data.files)}")
+            st.info("Expected keys: 'movie_embeddings', 'movie_biases', 'movie_id_map'")
+        except Exception as inner_e:
+            st.error(f"Could not read model file: {inner_e}")
+        st.stop()
     except Exception as e:
-        st.error(f"❌ Error loading model: {e}")
-        st.info("💡 Tip: If the model is corrupted, delete 'best_model.npz' and restart the app.")
-        # If the file is corrupted, delete it so it downloads again next time
-        if os.path.exists(MODEL_PATH):
-            try:
-                os.remove(MODEL_PATH)
-                st.info("🗑️ Corrupted model file deleted. Please restart the app.")
-            except:
-                pass
+        st.error(f"❌ Error initializing recommender: {e}")
+        st.info("💡 Tip: Check that your model file has the correct structure.")
+        import traceback
+        with st.expander("Show full error traceback"):
+            st.code(traceback.format_exc())
         st.stop()
 
 # Load the resources
