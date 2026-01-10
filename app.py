@@ -59,7 +59,7 @@ st.set_page_config(
 
 # Google Drive File IDs
 # Get the ID from the share link: https://drive.google.com/file/d/FILE_ID_HERE/view?usp=sharing
-MODEL_FILE_ID = '1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq'  # Your model file
+MODEL_FILE_ID = '1f7ImoZRL4C9x_ZzSG4qhTCunV2lVvpD8'  # Your model file
 MOVIES_FILE_ID = '1sRGLCqUlZHHIauj8dJK46nfBtGtJq12v?usp=drive_link'  # Replace with your movies.csv file ID 
 
 # ==========================================
