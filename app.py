@@ -44,16 +44,22 @@ try:
 except ImportError as e:
     st.error(f"""
     ❌ Import Error: {e}
-    
+     
     Please ensure your folder structure is correct:
+
 ```
-    project/
-    ├── app.py
-    ├── src/
-    │   ├── recommender.py
-    │   └── utils.py
-    └── data/
-        └── movies.csv
+
+```
+project/
+├── app.py
+├── src/
+│   ├── recommender.py
+│   └── utils.py
+└── data/
+    └── movies.csv
+
+```
+
 ```
     """)
     st.stop()
@@ -72,7 +78,6 @@ try:
     OMDB_API_KEY = st.secrets["OMDB_API_KEY"]
 except:
     OMDB_API_KEY = None
-    st.warning("⚠️ No OMDb API key found. Movie posters will show placeholders.")
 
 # ==========================================
 # 4. HELPER FUNCTIONS
@@ -110,10 +115,10 @@ def get_poster_url(imdb_id):
 
 
 def generate_poster_placeholder(title):
-    """Generate a nice-looking poster placeholder with gradient."""
-    title_hash = int(hashlib.md5(title.encode()).hexdigest()[:6], 16)
-    color1 = f"#{title_hash % 0xFFFFFF:06x}"
-    color2 = f"#{(title_hash * 2) % 0xFFFFFF:06x}"
+    """Generate a nice-looking poster placeholder with blue gradient."""
+    # Using specific blue shades for consistency
+    color1 = "#4A90E2" # Medium Blue
+    color2 = "#81D4FA" # Light Blue
     
     display_title = title[:25] + "..." if len(title) > 25 else title
     
@@ -131,7 +136,7 @@ def generate_poster_placeholder(title):
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     ">
         <div style="font-size: 3.5rem; margin-bottom: 0.5rem; opacity: 0.9;">🎬</div>
-        <div style="color: white; font-weight: bold; font-size: 0.85rem; padding: 0 0.5rem; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+        <div style="color: white; font-weight: bold; font-size: 0.85rem; padding: 0 0.5rem; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">
             {display_title}
         </div>
     </div>
@@ -221,54 +226,50 @@ def load_data_and_model():
 
 st.markdown("""
 <style>
-    /* Reduce top padding */
+    /* Fix: Increase top padding so header isn't hidden */
     .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 1rem !important;
+        padding-top: 5rem !important;
+        padding-bottom: 2rem !important;
     }
     
+    /* Main Header Styling - Light Blue Theme */
     .main-header { 
-        font-size: 2.8rem; 
-        font-weight: bold; 
+        font-size: 3rem; 
+        font-weight: 800; 
         text-align: center; 
-        color: #FF6B6B; 
-        margin-top: 0 !important;
-        margin-bottom: 1.5rem;
+        color: #4A90E2; /* Dodger Blue */
+        margin-top: -3rem !important; /* Pull it up slightly into the new padding space */
+        margin-bottom: 2rem;
         padding-top: 0 !important;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
     }
     
     .sub-header { 
         font-size: 1.5rem; 
         font-weight: bold; 
-        color: #4ECDC4; 
+        color: #5D9CEC; /* Lighter Blue */
         margin-top: 1.5rem; 
         margin-bottom: 1rem; 
     }
     
     .movie-card { 
-        background-color: #1e1e1e; 
+        background-color: #f8f9fa; /* Very light grey/white */
         padding: 1.5rem; 
         border-radius: 10px; 
         margin-bottom: 1rem; 
-        border-left: 5px solid #FF6B6B;
+        border-left: 5px solid #4A90E2; /* Blue Border */
         transition: transform 0.2s;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
     
     .movie-card:hover {
         transform: translateX(5px);
     }
     
-    .metric-card { 
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-        padding: 1rem; 
-        border-radius: 10px; 
-        color: white; 
-        text-align: center; 
-    }
-    
+    /* Button Styling - Blue Theme */
     .stButton>button {
         width: 100%;
-        background-color: #FF6B6B;
+        background-color: #4A90E2; /* Blue */
         color: white;
         font-weight: bold;
         border-radius: 8px;
@@ -278,9 +279,17 @@ st.markdown("""
     }
     
     .stButton>button:hover {
-        background-color: #ff5252;
+        background-color: #357ABD; /* Darker Blue on hover */
         transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(255,107,107,0.3);
+        box-shadow: 0 4px 8px rgba(74, 144, 226, 0.3);
+        color: white;
+    }
+
+    /* Secondary/Ghost Buttons (like Delete/Clear) */
+    div[data-testid="column"] button[kind="secondary"] {
+        background-color: transparent;
+        border: 1px solid #4A90E2;
+        color: #4A90E2;
     }
     
     /* Hide Streamlit branding */
@@ -291,7 +300,7 @@ st.markdown("""
     hr {
         margin: 1rem 0;
         border: none;
-        border-top: 1px solid #333;
+        border-top: 1px solid #E1E8ED;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -341,13 +350,11 @@ with st.sidebar:
     
     if not OMDB_API_KEY:
         st.markdown("---")
-        st.warning("⚠️ Posters disabled. Add OMDb API key in Streamlit secrets.")
+        st.caption("⚠️ Posters disabled. Add OMDb API key in Streamlit secrets.")
 
 # ==========================================
 # 10. MAIN CONTENT - RECOMMENDATIONS
 # ==========================================
-
-st.markdown('<div class="sub-header">Get Personalized Recommendations</div>', unsafe_allow_html=True)
 
 # Initialize session state
 if 'rated_movies' not in st.session_state:
@@ -357,8 +364,8 @@ col1, col2 = st.columns([1, 2])
 
 # LEFT COLUMN - Rate Movies
 with col1:
-    st.markdown("#### 🎬 Rate Some Movies")
-    st.caption("Search and rate movies to get personalized recommendations")
+    st.markdown('<div class="sub-header">Rate Movies</div>', unsafe_allow_html=True)
+    st.caption("Search and rate movies to teach the AI.")
     
     # Movie search
     search_movie = st.text_input(
@@ -395,35 +402,21 @@ with col1:
                     else:
                         st.warning("Already rated!")
         else:
-            st.info("No movies found. Try a different search.")
+            st.info("No movies found.")
     
-    st.markdown("---")
+    st.markdown("<div style='margin-bottom: 20px'></div>", unsafe_allow_html=True)
     
-    # Display rated movies
-    st.markdown("#### 📝 Your Ratings")
+    # ==========================================
+    # ACTION BUTTONS (MOVED UP)
+    # ==========================================
+    
+    # Logic Settings (Hardcoded as requested)
+    n_recs = 10
+    iterations = 20
     
     if st.session_state.rated_movies:
-        for i, (movie_id, rating, title) in enumerate(st.session_state.rated_movies):
-            col_a, col_b, col_c = st.columns([4, 2, 1])
-            with col_a:
-                st.markdown(f"**{title[:35]}{'...' if len(title) > 35 else ''}**")
-            with col_b:
-                st.caption(f"⭐ {rating:.1f}/5.0")
-            with col_c:
-                if st.button("🗑️", key=f"del_{i}", help="Remove"):
-                    st.session_state.rated_movies.pop(i)
-                    st.rerun()
-        
-        st.markdown("---")
-        
-        # Settings
-        n_recs = st.slider("Number of Recommendations", 5, 30, 10, 5)
-        iterations = st.slider("Training Quality", 5, 30, 15, 5, 
-                              help="More iterations = better quality but slower")
-        
-        # Get recommendations button
         if st.button("🎬 Get Recommendations", type="primary", use_container_width=True):
-            with st.spinner("🔮 Training AI on your preferences..."):
+            with st.spinner("🔮 Computing..."):
                 try:
                     user_ratings = [(m_id, rating) for m_id, rating, _ in st.session_state.rated_movies]
                     
@@ -434,30 +427,46 @@ with col1:
                     )
                     
                     st.session_state.recs = recs
-                    st.success(f"✅ Found {len(recs)} perfect matches!")
+                    st.success(f"✅ Found {len(recs)} matches!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error: {e}")
-                    with st.expander("Show error details"):
-                        import traceback
-                        st.code(traceback.format_exc())
         
-        # Clear button
-        if st.button("🔄 Clear All Ratings", use_container_width=True):
+        if st.button("🔄 Clear All", use_container_width=True):
             st.session_state.rated_movies = []
             st.session_state.pop('recs', None)
             st.rerun()
-    else:
-        st.info("👆 Search and rate some movies to get started!")
+            
+    # ==========================================
+    # RATED MOVIES LIST (MOVED DOWN)
+    # ==========================================
+    
+    if st.session_state.rated_movies:
+        st.markdown("---")
+        st.markdown("#### 📝 Your Ratings")
         
-        with st.expander("💡 Need ideas? Try these popular movies"):
+        for i, (movie_id, rating, title) in enumerate(st.session_state.rated_movies):
+            col_a, col_b, col_c = st.columns([4, 2, 1])
+            with col_a:
+                st.markdown(f"**{title[:30]}**")
+            with col_b:
+                st.caption(f"⭐ {rating}")
+            with col_c:
+                if st.button("✕", key=f"del_{i}", help="Remove"):
+                    st.session_state.rated_movies.pop(i)
+                    st.rerun()
+                    
+    elif not search_movie:
+        # Show suggestions if nothing rated and not searching
+        st.markdown("---")
+        with st.expander("💡 Popular movies to start with"):
             suggestions = movies_df.head(10)['title'].tolist()
             for movie in suggestions:
                 st.caption(f"• {movie}")
 
 # RIGHT COLUMN - Show Recommendations
 with col2:
-    st.markdown("#### 🎥 Your Personalized Recommendations")
+    st.markdown('<div class="sub-header">Your Recommendations</div>', unsafe_allow_html=True)
     
     if 'recs' in st.session_state and st.session_state.recs:
         st.caption(f"✨ Based on your {len(st.session_state.rated_movies)} ratings")
@@ -491,7 +500,7 @@ with col2:
                 st.markdown(f"""
                 <div style="margin-bottom: 0.5rem;">
                     <span style="
-                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        background-color: #4A90E2;
                         color: white;
                         padding: 0.25rem 0.75rem;
                         border-radius: 20px;
@@ -499,19 +508,21 @@ with col2:
                         font-size: 0.9rem;
                         margin-right: 0.5rem;
                     ">#{idx}</span>
-                    <span style="color: #FF6B6B; font-weight: bold; font-size: 1.2rem;">
+                    <span style="color: #2C3E50; font-weight: bold; font-size: 1.3rem;">
                         {rec['title']}
                     </span>
                 </div>
                 """, unsafe_allow_html=True)
                 
                 st.markdown(f"""
-                <p style="margin: 0.5rem 0; color: #999; font-size: 0.9rem;">
+                <p style="margin: 0.5rem 0; color: #7F8C8D; font-size: 0.9rem;">
                     {format_genres(rec['genres'])}
                 </p>
                 """, unsafe_allow_html=True)
                 
-                score_color = "#4ECDC4" if rec['score'] > 0.5 else "#FFA500"
+                # Dynamic score color (Green to Blue)
+                score_color = "#2ECC71" if rec['score'] > 0.8 else "#3498DB"
+                
                 st.markdown(f"""
                 <p style="margin: 0.5rem 0;">
                     <span style="color: {score_color}; font-weight: bold;">
@@ -528,23 +539,17 @@ with col2:
         st.markdown("""
         <div style="
             text-align: center;
-            padding: 3rem 1rem;
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            padding: 4rem 2rem;
+            background: linear-gradient(135deg, rgba(74, 144, 226, 0.1) 0%, rgba(129, 212, 250, 0.1) 100%);
             border-radius: 15px;
-            margin-top: 2rem;
+            margin-top: 1rem;
+            border: 1px dashed #4A90E2;
         ">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🎬</div>
-            <h3 style="color: #4ECDC4; margin-bottom: 0.5rem;">No Recommendations Yet</h3>
-            <p style="color: #999; margin-bottom: 1.5rem;">
-                Rate some movies on the left to get personalized recommendations!
+            <div style="font-size: 4rem; margin-bottom: 1rem;">📺</div>
+            <h3 style="color: #4A90E2; margin-bottom: 0.5rem;">Ready to Recommend</h3>
+            <p style="color: #7F8C8D; margin-bottom: 1.5rem;">
+                Rate a few movies on the left, then click the button above!
             </p>
-            <div style="color: #666; font-size: 0.9rem;">
-                <p>💡 <strong>Quick Start:</strong></p>
-                <p>1. Search for movies you've watched</p>
-                <p>2. Rate them honestly (0.5 - 5.0 stars)</p>
-                <p>3. Click "Get Recommendations"</p>
-                <p>4. Discover your next favorite movie! 🍿</p>
-            </div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -554,15 +559,7 @@ with col2:
 
 st.markdown("---")
 st.markdown("""
-<div style="text-align: center; color: #666; padding: 1rem;">
-    <p style="margin: 0.5rem 0;">Built with ❤️ using Streamlit</p>
-    <p style="margin: 0.5rem 0; font-size: 0.9rem;">
-        Powered by Matrix Factorization (ALS) • 
-        <a href="https://github.com/yourusername/movie-recommender" target="_blank" style="color: #4ECDC4; text-decoration: none;">View on GitHub</a>
-    </p>
-    <p style="margin: 0.5rem 0; font-size: 0.8rem; color: #888;">
-        Movie data from <a href="https://movielens.org" target="_blank" style="color: #888;">MovieLens</a> • 
-        Posters from <a href="http://www.omdbapi.com" target="_blank" style="color: #888;">OMDb API</a>
-    </p>
+<div style="text-align: center; color: #95A5A6; padding: 1rem;">
+    <p style="margin: 0.5rem 0;">Movie Recommender System</p>
 </div>
 """, unsafe_allow_html=True)
