@@ -59,7 +59,7 @@ st.set_page_config(
 
 # Google Drive File IDs
 # Get the ID from the share link: https://drive.google.com/file/d/FILE_ID_HERE/view?usp=sharing
-MODEL_FILE_ID = '1LJkoK0kvKReRCs-TS6KPIzEffDhIdCNu'  # Your model file
+MODEL_FILE_ID = '1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq'  # Your model file
 MOVIES_FILE_ID = '1sRGLCqUlZHHIauj8dJK46nfBtGtJq12v?usp=drive_link'  # Replace with your movies.csv file ID 
 
 # ==========================================
@@ -205,13 +205,12 @@ with st.sidebar:
     page = st.radio("Go to:", ["🏠 Home", "🎬 Recommendations", "🔍 Similar Movies"])
     
     st.markdown("---")
-    st.markdown("### 📊 Model Info")
     st.info(f"""
-    **Loaded Successfully!**
+    **Model Info:**
     
     📽️ Movies: {recommender.n_movies:,}  
-    👥 Users: {len(recommender.user_biases):,}  
-    📐 Dimensions: {recommender.k}
+    📐 Dimensions: {recommender.k}  
+    🎯 Type: Dummy User Training
     """)
     
     st.markdown("---")
@@ -235,12 +234,12 @@ if page == "🏠 Home":
     
     with col2:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.metric("👥 Total Users", f"{len(recommender.user_biases):,}")
+        st.metric("📐 Dimensions", recommender.k)
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col3:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.metric("📐 Model Dims", recommender.k)
+        st.metric("🎯 Model Type", "Dummy User")
         st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown("---")
@@ -268,34 +267,89 @@ if page == "🏠 Home":
 elif page == "🎬 Recommendations":
     st.markdown('<div class="sub-header">Get Personalized Recommendations</div>', unsafe_allow_html=True)
     
+    # Initialize session state for rated movies
+    if 'rated_movies' not in st.session_state:
+        st.session_state.rated_movies = []
+    
     col1, col2 = st.columns([1, 2])
     
     with col1:
-        st.markdown("#### ⚙️ Settings")
-        user_id = st.number_input(
-            "Enter User ID", 
-            min_value=0, 
-            max_value=len(recommender.user_biases)-1,
-            value=0,
-            help="Enter a valid user ID to get recommendations"
-        )
+        st.markdown("#### 🎬 Rate Some Movies")
+        st.caption("Search and rate movies to get personalized recommendations")
         
-        n_recs = st.slider("Number of Recommendations", min_value=5, max_value=20, value=10)
+        # Movie search
+        search_movie = st.text_input("Search for a movie", placeholder="e.g., Harry Potter...")
         
-        if st.button("🎬 Get Recommendations", type="primary", use_container_width=True):
-            with st.spinner("Generating recommendations..."):
-                try:
-                    recs = recommender.recommend_movies(user_id, n_recommendations=n_recs)
-                    st.session_state.recs = recs
-                    st.session_state.user_id = user_id
-                    st.success(f"✅ Found {len(recs)} recommendations!")
-                except Exception as e:
-                    st.error(f"❌ Error generating recommendations: {e}")
+        if search_movie:
+            matches = movies_df[movies_df['title'].str.contains(search_movie, case=False, na=False)].head(10)
+            
+            if not matches.empty:
+                movie_to_rate = st.selectbox(
+                    "Select Movie",
+                    options=matches['movieId'].tolist(),
+                    format_func=lambda x: matches[matches['movieId']==x]['title'].iloc[0]
+                )
+                
+                rating = st.slider("Your Rating", 0.5, 5.0, 3.0, 0.5)
+                
+                if st.button("➕ Add Rating", use_container_width=True):
+                    movie_title = matches[matches['movieId']==movie_to_rate]['title'].iloc[0]
+                    # Check if already rated
+                    if movie_to_rate not in [m[0] for m in st.session_state.rated_movies]:
+                        st.session_state.rated_movies.append((movie_to_rate, rating, movie_title))
+                        st.success(f"Added: {movie_title}")
+                    else:
+                        st.warning("Already rated this movie!")
+        
+        st.markdown("---")
+        st.markdown("#### 📝 Your Ratings")
+        
+        if st.session_state.rated_movies:
+            for i, (movie_id, rating, title) in enumerate(st.session_state.rated_movies):
+                col_a, col_b = st.columns([4, 1])
+                with col_a:
+                    st.write(f"**{title}**")
+                    st.caption(f"⭐ {rating}")
+                with col_b:
+                    if st.button("🗑️", key=f"del_{i}"):
+                        st.session_state.rated_movies.pop(i)
+                        st.rerun()
+            
+            st.markdown("---")
+            n_recs = st.slider("Number of Recommendations", 5, 20, 10)
+            iterations = st.slider("Training Iterations", 5, 20, 10)
+            
+            if st.button("🎬 Get Recommendations", type="primary", use_container_width=True):
+                with st.spinner("Training dummy user and generating recommendations..."):
+                    try:
+                        # Convert to format expected by recommender
+                        user_ratings = [(m_id, rating) for m_id, rating, _ in st.session_state.rated_movies]
+                        
+                        recs = recommender.recommend_from_ratings(
+                            user_ratings, 
+                            n_recommendations=n_recs,
+                            iterations=iterations
+                        )
+                        
+                        st.session_state.recs = recs
+                        st.success(f"✅ Found {len(recs)} recommendations!")
+                    except Exception as e:
+                        st.error(f"❌ Error: {e}")
+                        import traceback
+                        st.code(traceback.format_exc())
+            
+            if st.button("🔄 Clear All Ratings", use_container_width=True):
+                st.session_state.rated_movies = []
+                st.session_state.pop('recs', None)
+                st.rerun()
+        else:
+            st.info("👆 Search and rate some movies to get started!")
     
     with col2:
         st.markdown("#### 🎥 Your Recommendations")
+        
         if 'recs' in st.session_state and st.session_state.recs:
-            st.caption(f"Recommendations for User ID: {st.session_state.get('user_id', user_id)}")
+            st.caption(f"Based on {len(st.session_state.rated_movies)} rated movies")
             
             for idx, rec in enumerate(st.session_state.recs, 1):
                 st.markdown(f"""
@@ -305,12 +359,12 @@ elif page == "🎬 Recommendations":
                         <b>Genres:</b> {format_genres(rec['genres'])}
                     </p>
                     <p style="margin:0; color:#4ECDC4;">
-                        ⭐ <b>Predicted Rating:</b> {rec['predicted_rating']:.2f} / 5.0
+                        📊 <b>Score:</b> {rec['score']:.4f}
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.info("👆 Enter a User ID and click 'Get Recommendations' to see results")
+            st.info("👈 Rate some movies and click 'Get Recommendations' to see results!")
 
 # --- SIMILAR MOVIES PAGE ---
 elif page == "🔍 Similar Movies":
