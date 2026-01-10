@@ -125,18 +125,18 @@ def generate_poster_placeholder(title):
     return f"""
     <div style="
         background: linear-gradient(135deg, {color1} 0%, {color2} 100%);
-        padding: 2rem 0.5rem;
+        padding: 1rem 0.5rem;
         border-radius: 8px;
         text-align: center;
-        min-height: 200px;
+        height: 250px;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     ">
-        <div style="font-size: 3.5rem; margin-bottom: 0.5rem; opacity: 0.9;">🎬</div>
-        <div style="color: white; font-weight: bold; font-size: 0.85rem; padding: 0 0.5rem; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+        <div style="font-size: 3rem; margin-bottom: 0.5rem; opacity: 0.9;">🎬</div>
+        <div style="color: white; font-weight: bold; font-size: 0.8rem; padding: 0 0.5rem; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">
             {display_title}
         </div>
     </div>
@@ -420,65 +420,78 @@ with col1:
                     st.session_state.rated_movies.pop(i)
                     st.rerun()
 
-# RIGHT COLUMN - Show Recommendations
+# RIGHT COLUMN - Show Recommendations (GRID LAYOUT)
 with col2:
     st.markdown('<div class="sub-header">Your Recommendations</div>', unsafe_allow_html=True)
     
     if 'recs' in st.session_state and st.session_state.recs:
         st.caption(f"✨ Based on your {len(st.session_state.rated_movies)} ratings")
         
-        for idx, rec in enumerate(st.session_state.recs, 1):
-            movie_info = movies_df[movies_df['movieId'] == rec['movieId']]
-            
-            col_poster, col_info = st.columns([1, 3])
-            
-            with col_poster:
-                poster_displayed = False
+        # ---------------------------------------------
+        # GRID LAYOUT IMPLEMENTATION
+        # ---------------------------------------------
+        cols = st.columns(3) # 3-Column Grid for density
+        
+        for idx, rec in enumerate(st.session_state.recs):
+            with cols[idx % 3]:
+                # Start of Card
                 
-                if not movie_info.empty and 'imdbId' in movie_info.columns:
-                    imdb_id = movie_info.iloc[0]['imdbId']
-                    poster_url = get_poster_url(imdb_id)
-                    
-                    if poster_url:
-                        try:
-                            st.image(poster_url, use_container_width=True)
-                            poster_displayed = True
-                        except:
-                            pass
-                
-                if not poster_displayed:
-                    st.markdown(
-                        generate_poster_placeholder(rec['title']),
-                        unsafe_allow_html=True
-                    )
-            
-            with col_info:
+                # 1. Rank Badge
                 st.markdown(f"""
                 <div style="margin-bottom: 0.5rem;">
                     <span style="
                         background-color: #4A90E2;
                         color: white;
-                        padding: 0.25rem 0.75rem;
-                        border-radius: 20px;
+                        padding: 0.2rem 0.6rem;
+                        border-radius: 10px;
                         font-weight: bold;
-                        font-size: 0.9rem;
-                        margin-right: 0.5rem;
-                    ">#{idx}</span>
-                    <span style="color: #4A90E2; font-weight: 800; font-size: 1.4rem;">
-                        {rec['title']}
-                    </span>
+                        font-size: 0.8rem;
+                    ">#{idx + 1}</span>
                 </div>
                 """, unsafe_allow_html=True)
                 
+                # 2. Poster
+                movie_info = movies_df[movies_df['movieId'] == rec['movieId']]
+                poster_url = None
+                
+                if not movie_info.empty and 'imdbId' in movie_info.columns:
+                    imdb_id = movie_info.iloc[0]['imdbId']
+                    poster_url = get_poster_url(imdb_id)
+                
+                if poster_url:
+                    try:
+                        st.image(poster_url, use_container_width=True)
+                    except:
+                        st.markdown(generate_poster_placeholder(rec['title']), unsafe_allow_html=True)
+                else:
+                    st.markdown(generate_poster_placeholder(rec['title']), unsafe_allow_html=True)
+                
+                # 3. Title (Blue #4A90E2 to match badge)
                 st.markdown(f"""
-                <p style="margin: 0.5rem 0; color: #7F8C8D; font-size: 0.9rem;">
-                    {format_genres(rec['genres'])}
-                </p>
+                <div style="
+                    font-weight: 800; 
+                    font-size: 1.1rem; 
+                    color: #4A90E2; 
+                    margin-top: 0.5rem; 
+                    line-height: 1.2;
+                    height: 3rem; /* Fixed height for alignment */
+                    overflow: hidden;
+                    display: -webkit-box;
+                    -webkit-line-clamp: 2;
+                    -webkit-box-orient: vertical;
+                ">
+                    {rec['title']}
+                </div>
                 """, unsafe_allow_html=True)
                 
-                # REMOVED MATCH SCORE PERCENTAGE HERE
-            
-            st.divider()
+                # 4. Genres (Compact)
+                st.markdown(f"""
+                <div style="color: #7F8C8D; font-size: 0.8rem; margin-bottom: 1.5rem;">
+                    {format_genres(rec['genres'])}
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # End of Card
     else:
         st.markdown("""
         <div style="
