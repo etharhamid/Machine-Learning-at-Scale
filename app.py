@@ -18,6 +18,7 @@ MODEL_PATH = BASE_DIR / 'best_model.npz'
 # DATA_PATH = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO_NAME/main/data/movies.csv"
 # Or for local file:
 DATA_PATH = BASE_DIR / 'data' / 'movies.csv'
+LINKS_PATH = BASE_DIR / 'data' / 'links.csv'
 
 # Add src to system path so we can import modules
 if str(SRC_DIR) not in sys.path:
@@ -60,7 +61,8 @@ st.set_page_config(
 # Google Drive File IDs
 # Get the ID from the share link: https://drive.google.com/file/d/FILE_ID_HERE/view?usp=sharing
 MODEL_FILE_ID = '1L_pXf730fiJsHVyoyHOaDBMFVE2vQ_Dq'  # Your model file
-MOVIES_FILE_ID = '1f7ImoZRL4C9x_ZzSG4qhTCunV2lVvpD8'  # Replace with your movies.csv file ID 
+MOVIES_FILE_ID = '1f7ImoZRL4C9x_ZzSG4qhTCunV2lVvpD8'  # Replace with your movies.csv file ID
+LINKS_FILE_ID = '1lxpfo64t39kppq2F4VKqFy5saxp-a4vC'  # Replace with your links.csv file ID from Google Drive 
 
 # ==========================================
 # 3. DATA LOADING & CACHING
@@ -111,7 +113,21 @@ def load_data_and_model():
             st.info("💡 Make sure the Google Drive link has 'Anyone with the link' sharing enabled")
             st.stop()
 
-    # 3. Load Movies Data
+    # 3. Download Links CSV if it doesn't exist (for movie posters)
+    if not os.path.exists(LINKS_PATH):
+        # Create data directory if it doesn't exist
+        os.makedirs(LINKS_PATH.parent, exist_ok=True)
+        
+        url = f'https://drive.google.com/uc?id={LINKS_FILE_ID}'
+        try:
+            with st.spinner("📥 Downloading links.csv from Google Drive..."):
+                gdown.download(url, str(LINKS_PATH), quiet=False)
+        except Exception as e:
+            # Links are optional - if download fails, continue without posters
+            st.warning(f"⚠️ Could not download links.csv: {e}")
+            st.info("💡 App will continue without movie posters")
+
+    # 4. Load Movies Data
     try:
         # Check file size first
         file_size = os.path.getsize(DATA_PATH)
@@ -129,6 +145,17 @@ def load_data_and_model():
             os.remove(DATA_PATH)
             st.info("Please restart the app to re-download the file")
             st.stop()
+        
+        # 5. Load Links Data (for IMDb posters)
+        links_df = None
+        if os.path.exists(LINKS_PATH):
+            try:
+                links_df = pd.read_csv(LINKS_PATH)
+                # Merge links with movies
+                movies_df = movies_df.merge(links_df, on='movieId', how='left')
+            except Exception as e:
+                # Continue without links if there's an error
+                pass
             
     except pd.errors.EmptyDataError:
         st.error(f"❌ Movies data file is empty: {DATA_PATH}")
@@ -140,7 +167,7 @@ def load_data_and_model():
         st.error(f"❌ Failed to load movies data: {e}")
         st.stop()
 
-    # 4. Initialize Recommender
+    # 6. Initialize Recommender
     try:
         recommender = MovieRecommender(str(MODEL_PATH), movies_df)
         return recommender, movies_df
@@ -166,6 +193,29 @@ def load_data_and_model():
 
 # Load the resources (silently)
 recommender, movies_df = load_data_and_model()
+
+# ==========================================
+# HELPER FUNCTIONS
+# ==========================================
+def get_poster_url(tmdb_id, size='w500'):
+    """
+    Get movie poster URL from TMDb
+    
+    Args:
+        tmdb_id: TMDb movie ID from links.csv
+        size: Poster size (w92, w154, w185, w342, w500, w780, original)
+    
+    Returns:
+        URL to poster image or None
+    """
+    if pd.isna(tmdb_id):
+        return None
+    
+    try:
+        tmdb_id = int(tmdb_id)
+        return f"https://image.tmdb.org/t/p/{size}/{tmdb_id}.jpg"
+    except:
+        return None
 
 # ==========================================
 # 4. CUSTOM CSS
@@ -323,17 +373,52 @@ with col2:
         st.caption(f"Based on {len(st.session_state.rated_movies)} rated movies")
         
         for idx, rec in enumerate(st.session_state.recs, 1):
-            st.markdown(f"""
-            <div class="movie-card">
-                <h4 style="margin:0; color:#FF6B6B;">#{idx} {rec['title']}</h4>
-                <p style="margin:0.5rem 0; color:#999;">
-                    <b>Genres:</b> {format_genres(rec['genres'])}
-                </p>
-                <p style="margin:0; color:#4ECDC4;">
-                    📊 <b>Score:</b> {rec['score']:.4f}
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+            # Get movie info including tmdbId for poster
+            movie_info = movies_df[movies_df['movieId'] == rec['movieId']]
+            
+            # Create columns for poster and info
+            col_poster, col_info = st.columns([1, 4])
+            
+            with col_poster:
+                # Try to display poster if tmdbId exists
+                poster_displayed = False
+                if not movie_info.empty and 'tmdbId' in movie_info.columns:
+                    tmdb_id = movie_info.iloc[0]['tmdbId']
+                    if pd.notna(tmdb_id):
+                        try:
+                            # TMDb poster URL (w185 = 185px width)
+                            poster_url = f"https://image.tmdb.org/t/p/w185/{int(tmdb_id)}.jpg"
+                            st.image(poster_url, use_container_width=True)
+                            poster_displayed = True
+                        except:
+                            pass
+                
+                # Show placeholder if no poster
+                if not poster_displayed:
+                    st.markdown("""
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                padding: 2rem; 
+                                border-radius: 8px; 
+                                text-align: center;
+                                font-size: 3rem;">
+                        🎬
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with col_info:
+                st.markdown(f"""
+                <div style="padding: 0.5rem;">
+                    <h4 style="margin:0; color:#FF6B6B;">#{idx} {rec['title']}</h4>
+                    <p style="margin:0.5rem 0; color:#999; font-size: 0.9rem;">
+                        <b>Genres:</b> {format_genres(rec['genres'])}
+                    </p>
+                    <p style="margin:0; color:#4ECDC4;">
+                        📊 <b>Score:</b> {rec['score']:.4f}
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.divider()
     else:
         st.info("👈 Rate some movies and click 'Get Recommendations' to see results!")
 
