@@ -22,7 +22,12 @@ The project demonstrates the transition from a naive Python implementation to a 
 | :--- | :--- |
 | **`Full_Submission_Recommender_System.ipynb`** | **The Full Models.** . Implements all the Models and contains the full code. Including The Baseline (Unoptimized) pure Python implementation of  Bias only Model and Alternating Least Squares (ALS) Model. Useful for understanding the algorithmic logic before optimization. Includes the Optimized Solution for ALS, the high-performance Numba implementation. Features JIT-compiled kernels, parallelized loops, and custom Sparse Matrix structures (CSR/CSC). This code runs ~100x faster than the baseline.
 
-### 2. Application & Deployment
+###2. Documentation
+| File Name | Description |
+| :--- | :--- |
+| `RecommenderSystem_report.pdf` | Full paper documentation for the system. |
+
+### 3. Application & Deployment
 | File Name | Description |
 | :--- | :--- |
 | `app.py` | The source code for the Streamlit web application. Contains the inference-only Numba kernels for real-time scoring. |
